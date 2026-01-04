@@ -129,6 +129,8 @@ impl<Name: TNIDName> TNID<Name> {
     }
 
     /// Generates a new v1 TNID with provided randomness
+    ///
+    /// This really only needs 100 random bits, but getting a whole 128 is easier
     pub fn new_v1_with_random(random_bits: u128) -> Self {
         let id_name = Name::ID_NAME;
         debug_assert!(id_name.len() <= name_encoding::NAME_MAX_CHARS);

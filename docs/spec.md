@@ -131,6 +131,8 @@ undefined, however implementations are encouraged to handle this case gracefully
 Variant 1 is meant to have maximum randomness and entropy. Its use is similar to
 UUIDv4.
 
+#### Layout
+
 `1111.1111.1111.1111.1111.2222.2222.2222`-
 
 `2222.2222.2222.2222`-
@@ -194,16 +196,19 @@ Additionally, you can represent a TNID using the below representation(s):
 
 `<name>.<encoded-data>`
 
-**name**: The TNID name as ascii chars
+**name**: The TNID name as ascii chars. Must be 1 to 4 of the
+[allowed TNID Name Encoding characters](#tnid-name-encoding).
 
 **encoded-data**: The [TNID Data Encoding](#tnid-data-encoding) of the (1) TNID
 variant and (2) the TNID Data Bits (see [layout](#bit-layout)). These are taken
 in the order they appear: the first 40 data bits, then the 2 TNID variant bits,
-then then remaining 60 data bits.
+then then remaining 60 data bits. Must be 17 characters.
 
-ex: `test.Br2flcNDfF6LYICnT`
+Example: `test.Br2flcNDfF6LYICnT`
 
 ## Encodings
+
+These are the encodings that are used for TNID representations.
 
 ### TNID Name Encoding
 
