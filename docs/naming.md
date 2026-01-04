@@ -7,7 +7,6 @@ TNID stands for **T**yped **N**amed **ID**.
 Valid ways to refer to TNIDs are:
 
 - TNIDs
-- TNI UUIDs
 - a TNID
 - TNID ID
 - etc
