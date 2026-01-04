@@ -1,14 +1,16 @@
-# TNID Design
+# TNID Spec
 
 TNIDs are based on
 [UUIDv8](https://datatracker.ietf.org/doc/html/rfc9562#name-uuid-version-8).
 **This means that TNIDs should be able to be used anywhere that expects a
 standard UUID.**
 
-The 67th and 68th bits (directly after the UUID variant field) are used to
-denote the TNID variant, meaning there are 4 possible variants.
+TNIDs include some extras features that developers may find useful:
 
-All TNIDs also have the first 5 nibbles (20 bits) reserved for a name.
+- They include a name field, allowing ids of differrent kinds to be
+  differentiated at runtime and (in languages that support it) at compile time.
+- They have a string representation that is unambiguous and comparable (unlike
+  UUID's case insensitive hex representation).
 
 ## Bit Layout
 
@@ -110,14 +112,15 @@ get a collision.
 
 ##### Hex Sortability
 
-The (very common) UUID hex format is not case sensitive, meaning that `0xa1` and
-`0xA1` represent the same byte, _but those will not sort the same when compared
-as hex strings_. Therefore, if you rely on the ability to time sort TNIDs when
-represented in hex, ensure consistent casing. **This is also the case with
-UUIDs, or any use of hex encoded data.**
+The standard UUID hex representation is not case sensitive, meaning that `0xa1`
+and `0xA1` represent the same byte, _but those will not sort the same when
+compared as hex strings_. Therefore, if you rely on the ability to time sort
+TNIDs when represented in hex, ensure consistent casing. **This is also the case
+with UUIDs, or any use of hex encoded data.**
 
-Or better yet, always represent your TNIDs in an unambiguous format like a TNID
-string or as a 128 uint (as Postgres does with its UUID type).
+Or better yet, always represent your TNIDs in an unambiguous format like a
+[TNID string](#tnid-string) or as a 128 uint (as Postgres does with its UUID
+type).
 
 ##### Future IDs
 
@@ -211,6 +214,9 @@ Example: `test.Br2flcNDfF6LYICnT`
 These are the encodings that are used for TNID representations. Both are
 designed such that the ordering of the bit representation matches the ascii
 character representation.
+
+They also make an attempt to use only "safe" characters. For example, the
+encodings are URL safe.
 
 ### TNID Name Encoding
 
