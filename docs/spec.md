@@ -258,7 +258,9 @@ NOTE: after the null terminator, the rest of the name bits MUST also be zeros.
 Since there are 102 bits of data that are _not_ the name and _not_ needed to
 reproduce the TNID, they can be divided into 17 six-bit chunks. This lets us use
 a base64<i>-like</i> encoding (but _not_
-[RFC 4648 base64](https://datatracker.ietf.org/doc/html/rfc4648#section-4)).
+[RFC 4648 base64](https://datatracker.ietf.org/doc/html/rfc4648#section-4)). The
+bits needed to reproduce a TNID are the TNID Variant bits and the TNID Data bits
+[layout](#bit-layout).
 
 Since the TNID data is exactly divisible into 6 bit chunks, there's no need to
 handle padding.
