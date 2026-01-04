@@ -10,6 +10,36 @@ denote the TNID variant, meaning there are 4 possible variants.
 
 All TNIDs also have the first 5 nibbles (20 bits) reserved for a name.
 
+## Bit Layout
+
+Below is the common aspects of all TNID variants.
+
+`1111.1111.1111.1111.1111.5555.5555.5555`-
+
+`5555.5555.5555.5555`-
+
+`2222.5555.5555.5555`-
+
+`3344.5555.5555.5555`-
+
+`5555.5555.5555.5555.5555.5555.5555.5555.5555.5555.5555.5555`
+
+1. Name\
+   (20 bits) (5 nibbles = 4 encoded characters)\
+   Always encoded using the [TNID Name Encoding](#tnid-name-encoding)
+2. UUID version\
+   (4 bits)\
+   Always `0x8` for UUIDv8
+3. UUID variant\
+   (2 bits)\
+   Always `0b10` per the UUIDv8 spec
+4. TNID variant\
+   (2 bits)\
+   Denotes the TNID variant; decides how the data bits are used
+5. TNID Data Bits These bits are available for use by each
+   [TNID variant](#tnid-variants)\
+   (100 bits)
+
 ## TNID variants
 
 There are 2 bits that denote the TNID variant, allowing for 4 possible variants.
@@ -17,7 +47,11 @@ There are 2 bits that denote the TNID variant, allowing for 4 possible variants.
 ### Variant 0
 
 Variant 0 is meant to be time sortable when sorted by its three representations
-(u128, UUID hex, and TNID string). It's use case is similar to UUIDv7.
+(u128, UUID hex, and TNID string). It's use case and design is similar to
+UUIDv7.
+
+Thus, it uses the TNID Data Bits to store (a) some time data and (b) some random
+bits.
 
 #### Layout
 
@@ -147,13 +181,37 @@ Reserved for future definition.
 
 Reserved for future definition.
 
-## TNID Name Encoding
+## Representations
+
+Since TNIDs share UUID's same 128 bits, TNIDs can be represented any way a UUID
+can be. In addition, TNIDs also have a string representation that has a few
+benefits over UUID's
+[typical string representation](https://datatracker.ietf.org/doc/html/rfc9562#name-uuid-format).
+
+Additionally, you can represent a TNID using the below representation(s):
+
+### TNID String
+
+`<name>.<encoded-data>`
+
+**name**: The TNID name as ascii chars
+
+**encoded-data**: The [TNID Data Encoding](#tnid-data-encoding) of the (1) TNID
+variant and (2) the TNID Data Bits (see [layout](#bit-layout)). These are taken
+in the order they appear: the first 40 data bits, then the 2 TNID variant bits,
+then then remaining 60 data bits.
+
+ex: `test.Br2flcNDfF6LYICnT`
+
+## Encodings
+
+### TNID Name Encoding
 
 TNIDs use a 5 bit character encoding. The ordering was specifically chosen such
 that most systems would sort the character in a way that matches their byte
 representation.
 
-NOTE: after the null terminator, the rest of the name bits MUST be nulls.
+NOTE: after the null terminator, the rest of the name bits MUST also be zeros.
 
 | Bits  | Decimal | Char              |
 | ----- | ------- | ----------------- |
@@ -190,7 +248,7 @@ NOTE: after the null terminator, the rest of the name bits MUST be nulls.
 | 11110 | 30      | y                 |
 | 11111 | 31      | z                 |
 
-## TNID Data Encoding
+### TNID Data Encoding
 
 Since there are 102 bits of data that are _not_ the name and _not_ needed to
 reproduce the TNID, they can be divided into 17 six-bit chunks. This lets us use
