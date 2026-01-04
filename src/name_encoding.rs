@@ -1,3 +1,4 @@
+#[allow(clippy::indexing_slicing)] // panic is expected error path
 pub const fn name_valid_check(name: &str) {
     if let NAME_MIN_CHARS..=NAME_MAX_CHARS = name.len() {
         if !name.is_ascii() {

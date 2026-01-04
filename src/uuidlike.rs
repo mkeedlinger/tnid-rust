@@ -40,7 +40,11 @@ impl UUIDLike {
         }
 
         let bytes = uuid_string.as_bytes();
-        if bytes[8] != b'-' || bytes[13] != b'-' || bytes[18] != b'-' || bytes[23] != b'-' {
+        if bytes.get(8) != Some(&b'-')
+            || bytes.get(13) != Some(&b'-')
+            || bytes.get(18) != Some(&b'-')
+            || bytes.get(23) != Some(&b'-')
+        {
             return None;
         }
 
