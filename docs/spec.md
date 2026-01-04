@@ -113,8 +113,8 @@ get a collision.
 The (very common) UUID hex format is not case sensitive, meaning that `0xa1` and
 `0xA1` represent the same byte, _but those will not sort the same when compared
 as hex strings_. Therefore, if you rely on the ability to time sort TNIDs when
-represented in hex, ensure consistent casing. **(This is also the case with
-UUIDs)**
+represented in hex, ensure consistent casing. **This is also the case with
+UUIDs, or any use of hex encoded data.**
 
 Or better yet, always represent your TNIDs in an unambiguous format like a TNID
 string or as a 128 uint (as Postgres does with its UUID type).
@@ -218,7 +218,10 @@ TNIDs use a 5 bit character encoding. The ordering was specifically chosen such
 that most systems would sort the character in a way that matches their byte
 representation.
 
-NOTE: after the null terminator, the rest of the name bits MUST also be zeros.
+If a name is less than the maximum 4 characters, then there MUST be nulls
+filling in the unused space. For example, if a name `ab` was encoded, then the
+first 10 bits would be encoded chars, and the remaining 10 bits would all be
+zeroes (nulls).
 
 | Bits  | Decimal | Char (ascii)      |
 | ----- | ------- | ----------------- |
