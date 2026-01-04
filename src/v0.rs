@@ -1,4 +1,5 @@
 use crate::name_encoding;
+use crate::name_encoding::NameStr;
 use crate::utils;
 
 fn millis_mask(millis_since_epoch: u64) -> u128 {
@@ -26,10 +27,10 @@ fn random_bits_mask(random: u64) -> u128 {
     random & MASK
 }
 
-pub fn make_from_parts(name: &str, epoch_millis: u64, random: u64) -> u128 {
+pub fn make_from_parts(name: NameStr, epoch_millis: u64, random: u64) -> u128 {
     let mut id = 0u128;
 
-    id |= name_encoding::id_name_mask(name).unwrap(); // change unwrap to handle errors
+    id |= name_encoding::name_mask(name);
 
     id |= millis_mask(epoch_millis);
 
@@ -56,7 +57,8 @@ mod tests {
 
     #[test]
     fn name_mask_correct_location() {
-        let mask = name_encoding::id_name_mask("zzzz").unwrap();
+        let name = NameStr::new("zzzz").unwrap();
+        let mask = name_encoding::name_mask(name);
 
         assert_eq!(mask.leading_zeros(), 0);
         assert_eq!(mask.leading_ones(), 20);

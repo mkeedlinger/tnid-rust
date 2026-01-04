@@ -67,9 +67,11 @@ pub fn encrypt(id_secret_data: u128, secret: &[u8; 16]) -> u128 {
 
     let hex_digits = u128_to_hex_digits(data);
     let numeral_string = FlexibleNumeralString::from(hex_digits);
-    let ff1 = FF1::<Aes128>::new(secret, 16).unwrap(); // radix 16 for hex
+    let ff1 = FF1::<Aes128>::new(secret, 16).expect("16 is valid radix");
 
-    let encrypted = ff1.encrypt(&[], &numeral_string).unwrap();
+    let encrypted = ff1
+        .encrypt(&[], &numeral_string)
+        .expect("string is in required radix");
 
     hex_digits_to_u128(encrypted.into())
 }
@@ -81,18 +83,35 @@ pub fn decrypt(id_secret_data: u128, secret: &[u8; 16]) -> u128 {
 
     let hex_digits = u128_to_hex_digits(data);
     let numeral_string = FlexibleNumeralString::from(hex_digits);
-    let ff1 = FF1::<Aes128>::new(secret, 16).unwrap(); // radix 16 for hex
+    let ff1 = FF1::<Aes128>::new(secret, 16).expect("16 is valid radix");
 
-    let decrypted = ff1.decrypt(&[], &numeral_string).unwrap();
+    let decrypted = ff1
+        .decrypt(&[], &numeral_string)
+        .expect("string is in required radix");
 
     hex_digits_to_u128(decrypted.into())
 }
 
+#[cfg(all(test, not(debug_assertions)))]
+mod tests_release {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 100_000, .. ProptestConfig::default()
+        })]
+        #[test]
+        fn decrypt_no_panic(id_secret_data: u128, secret: u128) {
+            decrypt(id_secret_data, &secret.to_le_bytes());
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::u128;
-
     use super::*;
+    use std::u128;
 
     #[test]
     fn secret_data_extract_correctly() {

@@ -67,28 +67,57 @@ pub const CHAR_MAPPING: [(u8, u8); 31] = [
     (31, b'z'),
 ];
 
-pub fn id_name_mask(name: &str) -> Option<u128> {
-    if !name.is_ascii() {
-        return None;
+pub struct NameStr<'a>(&'a str);
+impl<'a> NameStr<'a> {
+    pub const fn new_const(s: &'static str) -> Self {
+        name_valid_check(s);
+        Self(s)
     }
 
+    pub fn new(s: &'a str) -> Option<Self> {
+        if s.len() > NAME_MAX_CHARS || s.len() < NAME_MIN_CHARS {
+            return None;
+        }
+
+        if !s.is_ascii() {
+            return None;
+        }
+
+        // Check all characters are in CHAR_MAPPING
+        let bytes = s.as_bytes();
+        for &byte in bytes {
+            let mut found = false;
+            for &(_, valid_char) in &CHAR_MAPPING {
+                if valid_char == byte {
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                return None;
+            }
+        }
+
+        Some(Self(s))
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0
+    }
+}
+
+pub fn name_mask(name: NameStr) -> u128 {
+    let name = name.as_str();
     let name_bytes = name.as_bytes();
-
-    if name_bytes.len() > NAME_MAX_CHARS {
-        return None;
-    }
 
     let mut mask = 0u128;
 
-    for &name_char in name.as_bytes() {
+    for &name_char in name_bytes {
         let encoding_mapping = CHAR_MAPPING
             .iter()
             .find(|(_encoded, from_char)| *from_char == name_char);
 
-        let Some((encoded_byte, _)) = encoding_mapping else {
-            // mapping not possible
-            return None;
-        };
+        let (encoded_byte, _) = encoding_mapping.expect("mapping must exist");
 
         debug_assert!(*encoded_byte < 32);
 
@@ -101,5 +130,25 @@ pub fn id_name_mask(name: &str) -> Option<u128> {
 
     mask <<= 108;
 
-    Some(mask)
+    mask
+}
+
+#[cfg(all(test, not(debug_assertions)))]
+mod tests_release {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 100_000, .. ProptestConfig::default()
+        })]
+        #[test]
+        fn name_mask_no_panic(name: String) {
+            let Some(name) = NameStr::new(name.as_str()) else {
+                return Ok(());
+            };
+
+            name_mask(name);
+        }
+    }
 }

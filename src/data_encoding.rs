@@ -96,9 +96,7 @@ pub fn id_data_to_string(id: u128) -> String {
 
         let mapping = CHAR_MAPPING.iter().find(|(value, _)| *value == char_val);
 
-        let Some((_, char)) = mapping else {
-            panic!("Mapping must exist");
-        };
+        let (_, char) = mapping.expect("Mapping must exist");
 
         s.push(*char as char);
     }
@@ -210,5 +208,21 @@ mod tests {
         let string = id_data_to_string(original_id);
         let decoded = string_to_id_data(&string).unwrap();
         assert_eq!(decoded, extract_data_bits(original_id));
+    }
+}
+
+#[cfg(all(test, not(debug_assertions)))]
+mod tests_release {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 1_000_000, .. ProptestConfig::default()
+        })]
+        #[test]
+        fn id_data_to_string_no_panic(id: u128){
+            id_data_to_string(id);
+        }
     }
 }

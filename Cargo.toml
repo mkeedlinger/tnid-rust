@@ -11,6 +11,8 @@ time = {version = "0.3.36", optional = true}
 
 [dev-dependencies]
 uuid = "1"
+proptest = "1.9.0"
+
 
 [features]
 default = ["time", "rand"]
