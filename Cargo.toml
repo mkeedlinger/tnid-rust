@@ -2,6 +2,10 @@
 name = "tnid"
 version = "0.0.1"
 edition = "2024"
+description = "A UUID compatible ID with static type checking"
+license = "MIT"
+documentation = "https://docs.rs/tnid"
+repository = "https://github.com/mkeedlinger/tnid"
 
 [dependencies]
 aes = {version = "0.8.4", optional = true}
