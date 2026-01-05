@@ -1,3 +1,43 @@
+//! TNID name encoding and validation.
+//!
+//! TNIDs include a name field (20 bits, 1-4 characters) that allows different kinds of IDs
+//! to be differentiated at runtime and compile time. This module handles the encoding of
+//! names into the TNID bit representation and validation of name strings.
+//!
+//! # Name Requirements
+//!
+//! Valid TNID names must:
+//! - Be 1-4 characters long
+//! - Contain only ASCII characters
+//! - Use only characters from the allowed character set: digits (0-4) and lowercase letters (a-z)
+//!
+//! # Name Encoding
+//!
+//! Names are encoded using a 5-bit character encoding scheme (see [`CHAR_MAPPING`]). The encoding
+//! is designed so that the bit representation ordering matches ASCII character ordering, making
+//! TNIDs sortable in their string representation.
+//!
+//! If a name is shorter than 4 characters, it is null-padded to fill the 20-bit name field.
+//!
+//! # Examples
+//!
+//! ```rust
+//! use tnid::NameStr;
+//!
+//! // Valid names
+//! let name1 = NameStr::new("user").unwrap();
+//! let name2 = NameStr::new("post").unwrap();
+//! let name3 = NameStr::new("a").unwrap();     // Single character is ok
+//! let name4 = NameStr::new("test").unwrap();  // 4 characters (max)
+//!
+//! // Invalid names
+//! assert!(NameStr::new("").is_none());           // Too short
+//! assert!(NameStr::new("toolong").is_none());    // Too long (>4 chars)
+//! assert!(NameStr::new("User").is_none());       // Uppercase not allowed
+//! assert!(NameStr::new("a-b").is_none());        // Dash not allowed
+//! assert!(NameStr::new("test9").is_none());      // Digit 9 not in allowed set
+//! ```
+
 #[allow(clippy::indexing_slicing)] // panic is expected error path
 pub const fn name_valid_check(name: &str) {
     if let NAME_MIN_CHARS..=NAME_MAX_CHARS = name.len() {
@@ -68,13 +108,99 @@ pub const CHAR_MAPPING: [(u8, u8); 31] = [
     (31, b'z'),
 ];
 
+/// A validated TNID name string.
+///
+/// This type wraps a string slice and ensures it meets all TNID name requirements:
+/// - Length between 1-4 characters (inclusive)
+/// - ASCII only
+/// - Only characters from the allowed set: digits 0-4 and lowercase letters a-z
+///
+/// # Examples
+///
+/// ```rust
+/// use tnid::NameStr;
+///
+/// // Runtime validation with new()
+/// let name = NameStr::new("user").unwrap();
+/// assert_eq!(name.as_str(), "user");
+///
+/// // Invalid names return None
+/// assert!(NameStr::new("").is_none());
+/// assert!(NameStr::new("CAPS").is_none());
+/// ```
 pub struct NameStr<'a>(&'a str);
 impl<'a> NameStr<'a> {
+    /// Creates a new `NameStr` with compile-time validation when used in a const context.
+    ///
+    /// This method performs validation and will panic if the name is invalid. When used
+    /// in a const context (like defining a [`TNIDName`](crate::TNIDName) implementation),
+    /// the panic will occur at compile time. If used at runtime, it will panic the program.
+    ///
+    /// **Prefer using [`new()`](Self::new) for runtime validation** which returns an `Option`
+    /// instead of panicking.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the name:
+    /// - Is not 1-4 characters long
+    /// - Contains non-ASCII characters
+    /// - Contains characters outside the allowed set (0-4, a-z)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{NameStr, TNIDName};
+    ///
+    /// // Used in a const context for TNIDName (validated at compile time)
+    /// struct User;
+    /// impl TNIDName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    /// ```
+    ///
+    /// This will fail to compile:
+    /// ```compile_fail
+    /// use tnid::{NameStr, TNIDName, TNID};
+    ///
+    /// struct Invalid;
+    /// impl TNIDName for Invalid {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("INVALID");
+    /// }
+    ///
+    /// // This actually uses the const and triggers the compile-time check
+    /// let _ = Invalid::ID_NAME;
+    /// ```
     pub const fn new_const(s: &'static str) -> Self {
         name_valid_check(s);
         Self(s)
     }
 
+    /// Creates a new `NameStr` with runtime validation.
+    ///
+    /// Returns `Some(NameStr)` if the string is a valid TNID name, or `None` if it's invalid.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::NameStr;
+    ///
+    /// // Valid names (1-4 chars, digits 0-4 and lowercase a-z only)
+    /// assert!(NameStr::new("user").is_some());
+    /// assert!(NameStr::new("post").is_some());
+    /// assert!(NameStr::new("a").is_some());
+    /// assert!(NameStr::new("test").is_some());
+    /// assert!(NameStr::new("id0").is_some());
+    ///
+    /// // Too short or too long
+    /// assert!(NameStr::new("").is_none());
+    /// assert!(NameStr::new("toolong").is_none());
+    ///
+    /// // Invalid characters
+    /// assert!(NameStr::new("User").is_none());    // uppercase not allowed
+    /// assert!(NameStr::new("id5").is_none());     // digits 5-9 not allowed
+    /// assert!(NameStr::new("a-b").is_none());     // special chars not allowed
+    /// assert!(NameStr::new("café").is_none());    // non-ASCII not allowed
+    /// ```
     pub fn new(s: &'a str) -> Option<Self> {
         if s.len() > NAME_MAX_CHARS || s.len() < NAME_MIN_CHARS {
             return None;
@@ -102,6 +228,16 @@ impl<'a> NameStr<'a> {
         Some(Self(s))
     }
 
+    /// Returns the validated name as a string slice.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::NameStr;
+    ///
+    /// let name = NameStr::new("user").unwrap();
+    /// assert_eq!(name.as_str(), "user");
+    /// ```
     pub fn as_str(&self) -> &str {
         self.0
     }
