@@ -12,9 +12,13 @@ aes = {version = "0.8.4", optional = true}
 fpe = {version = "0.6.1", optional = true}
 rand = {version = "0.8.5", optional = true}
 time = {version = "0.3.36", optional = true}
+uuid = {version = "1", optional = true}
+
+[dev-dependencies.uuid]
+version = "1"
+features = ["v4"]
 
 [dev-dependencies]
-uuid = "1"
 proptest = "1.9.0"
 
 
@@ -23,3 +27,4 @@ default = ["time", "rand"]
 encryption = ["dep:aes", "dep:fpe"]
 time = ["dep:time"]
 rand = ["dep:rand"]
+uuid = ["dep:uuid"]

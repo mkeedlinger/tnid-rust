@@ -14,6 +14,8 @@ mod encryption;
 mod name_encoding;
 mod tnid_variant;
 mod utils;
+#[cfg(feature = "uuid")]
+mod uuid;
 mod uuidlike;
 mod v0;
 mod v1;
@@ -75,12 +77,51 @@ impl<Name: TNIDName> Clone for TNID<Name> {
 }
 
 impl<Name: TNIDName> TNID<Name> {
+    /// Returns the name associated with this TNID type.
+    ///
+    /// The name comes from the [`TNIDName`] implementation for this type and is
+    /// used in the TNID string representation (`<name>.<data>`).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{TNID, TNIDName, NameStr};
+    ///
+    /// struct User;
+    /// impl TNIDName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// let id = TNID::<User>::new_v0();
+    /// assert_eq!(id.name(), "user");
+    /// ```
     pub fn name(&self) -> &'static str {
         Name::ID_NAME.as_str()
     }
 
-    /// The TNID name when the
-    /// bytes are encoded using hex, like they commonly are for UUIDs.
+    /// Returns the hex representation of the name field (20 bits as 5 hex characters).
+    ///
+    /// The ASCII representation of a name (like "test") is different from the hex
+    /// representation of those bits when viewing a TNID in hex format. This method shows
+    /// what the name looks like as hex, which is how it appears in TNID hex strings.
+    ///
+    /// This is useful for understanding what the name portion looks like in the hex
+    /// representation without needing a specific TNID instance.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{TNID, TNIDName, NameStr};
+    ///
+    /// struct Test;
+    /// impl TNIDName for Test {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("test");
+    /// }
+    ///
+    /// // Check what "test" looks like in hex (any TNID instance works)
+    /// let id = TNID::<Test>::new_v1();
+    /// assert_eq!(id.name_hex(), "cab19");
+    /// ```
     pub fn name_hex(&self) -> String {
         let hex = format!("{:05x}", self.id >> 108);
 
@@ -89,6 +130,34 @@ impl<Name: TNIDName> TNID<Name> {
         hex
     }
 
+    /// Returns the raw 128-bit UUIDv8-compatible representation of this TNID.
+    ///
+    /// This returns the complete bit representation including the name, UUID version/variant
+    /// bits, TNID variant, and all data bits.
+    ///
+    /// # Endianness
+    ///
+    /// The UUID specification dictates that [UUIDs are stored in big-endian](https://datatracker.ietf.org/doc/html/rfc9562#name-uuid-format) byte order.
+    /// When storing or transmitting this `u128` value as bytes, you may need to convert
+    /// to big-endian format using methods like [`u128::to_be_bytes()`] since `u128` uses
+    /// the platform's native endianness.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{TNID, TNIDName, NameStr};
+    ///
+    /// struct User;
+    /// impl TNIDName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// let id = TNID::<User>::new_v0();
+    /// let as_u128 = id.as_u128();
+    ///
+    /// // Convert to big-endian bytes for storage/transmission
+    /// let bytes = as_u128.to_be_bytes();
+    /// ```
     pub fn as_u128(&self) -> u128 {
         self.id
     }
@@ -106,7 +175,27 @@ impl<Name: TNIDName> TNID<Name> {
         Self::new_v0_with_time(time::OffsetDateTime::now_utc())
     }
 
-    /// Same as [`Self::new_v1`], just a more friendly name
+    /// Generates a new TNID with maximum randomness (alias for [`Self::new_v1`]).
+    ///
+    /// This variant maximizes entropy with 100 bits of random data, similar to UUIDv4
+    /// but with slightly less entropy due to the 20-bit name field. This is almost
+    /// certainly sufficient for most use cases.
+    ///
+    /// Use this when you don't need time-based sorting and want maximum randomness,
+    /// similar to choosing UUIDv4 over UUIDv7.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{TNID, TNIDName, NameStr};
+    ///
+    /// struct User;
+    /// impl TNIDName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// let id = TNID::<User>::new_high_entropy();
+    /// ```
     #[cfg(feature = "rand")]
     pub fn new_high_entropy() -> Self {
         Self::new_v1()
@@ -120,9 +209,33 @@ impl<Name: TNIDName> TNID<Name> {
         Self::new_v1_with_random(rand::random())
     }
 
-    /// Generates a new v1 TNID with provided randomness
+    /// Generates a new high-entropy TNID (v1) from explicit random bits.
     ///
-    /// This really only needs 100 random bits, but getting a whole 128 is easier
+    /// This creates a v1 TNID without requiring the `rand` feature dependency,
+    /// allowing you to provide your own randomness source. This is useful in
+    /// environments where the `rand` library may not be suitable (embedded systems,
+    /// WASM, or when you need a custom random source).
+    ///
+    /// # Parameters
+    ///
+    /// - `random_bits`: Random bits for the TNID. Only 100 bits are used, but
+    ///   accepting a `u128` makes it easier to provide randomness.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{TNID, TNIDName, NameStr};
+    ///
+    /// struct User;
+    /// impl TNIDName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// // Provide your own randomness
+    /// let random_bits = 0x0123456789ABCDEF0123456789ABCDEF;
+    ///
+    /// let id = TNID::<User>::new_v1_with_random(random_bits);
+    /// ```
     pub fn new_v1_with_random(random_bits: u128) -> Self {
         let id_name = Name::ID_NAME;
 
@@ -134,6 +247,52 @@ impl<Name: TNIDName> TNID<Name> {
         }
     }
 
+    /// Generates a new time-ordered TNID (v0) with a specific timestamp.
+    ///
+    /// This creates the same time-sortable TNID as [`Self::new_v0`], but allows you to
+    /// provide a specific timestamp instead of using the current time. The timestamp is
+    /// converted to milliseconds since the Unix epoch and encoded into the TNID.
+    ///
+    /// TNIDs created with earlier timestamps will sort before those with later timestamps
+    /// in all representations (u128, UUID hex, and TNID string).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{TNID, TNIDName, NameStr};
+    /// use time::OffsetDateTime;
+    ///
+    /// struct User;
+    /// impl TNIDName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// let timestamp = OffsetDateTime::now_utc();
+    /// let id = TNID::<User>::new_v0_with_time(timestamp);
+    /// ```
+    ///
+    /// Demonstrating time-based sorting:
+    /// ```rust
+    /// use tnid::{TNID, TNIDName, NameStr};
+    /// use time::{OffsetDateTime, Duration};
+    ///
+    /// struct User;
+    /// impl TNIDName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// let now = OffsetDateTime::now_utc();
+    /// let earlier = now - Duration::hours(1);
+    /// let later = now + Duration::hours(1);
+    ///
+    /// let id1 = TNID::<User>::new_v0_with_time(earlier);
+    /// let id2 = TNID::<User>::new_v0_with_time(now);
+    /// let id3 = TNID::<User>::new_v0_with_time(later);
+    ///
+    /// // Earlier times sort before later times
+    /// assert!(id1.as_u128() < id2.as_u128());
+    /// assert!(id2.as_u128() < id3.as_u128());
+    /// ```
     #[cfg(all(feature = "rand", feature = "time"))]
     pub fn new_v0_with_time(time: time::OffsetDateTime) -> Self {
         let id_name = Name::ID_NAME;
@@ -150,6 +309,34 @@ impl<Name: TNIDName> TNID<Name> {
         }
     }
 
+    /// Generates a new time-ordered TNID (v0) from explicit components.
+    ///
+    /// This creates a v0 TNID without requiring the `time` or `rand` feature dependencies,
+    /// allowing you to provide your own timestamp and randomness sources. This is useful
+    /// in environments where those libraries may not be suitable (embedded systems, WASM,
+    /// or when you need custom time/random sources).
+    ///
+    /// # Parameters
+    ///
+    /// - `epoch_millis`: Milliseconds since the Unix epoch (January 1, 1970 UTC)
+    /// - `random`: Random bits for the TNID (57 bits will be used)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{TNID, TNIDName, NameStr};
+    ///
+    /// struct User;
+    /// impl TNIDName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// // Provide your own timestamp and randomness
+    /// let timestamp_ms = 1750118400000;
+    /// let random_bits = 42;
+    ///
+    /// let id = TNID::<User>::new_v0_with_parts(timestamp_ms, random_bits);
+    /// ```
     pub fn new_v0_with_parts(epoch_millis: u64, random: u64) -> Self {
         Self {
             id_name: PhantomData,
@@ -157,6 +344,34 @@ impl<Name: TNIDName> TNID<Name> {
         }
     }
 
+    /// Returns the TNID string representation.
+    ///
+    /// This representation has several advantages over the UUID hex format:
+    /// - **Unambiguous**: Unlike UUID hex strings which are case-insensitive, TNID strings
+    ///   are case-sensitive with exactly one valid representation
+    /// - **Sortable**: For v0 TNIDs, the string representation maintains time-ordering
+    /// - **Human-readable name**: The name prefix makes it easy to identify the ID type
+    ///
+    /// The format is `<name>.<encoded-data>`, where the data is encoded using the TNID
+    /// Data Encoding that preserves these sortability and uniqueness properties.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{TNID, TNIDName, NameStr};
+    ///
+    /// struct User;
+    /// impl TNIDName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// let id = TNID::<User>::new_v0();
+    /// let tnid_string = id.as_tnid_string();
+    ///
+    /// // Format: <name>.<encoded-data>
+    /// // Example: "user.Br2flcNDfF6LYICnT"
+    /// assert!(tnid_string.starts_with("user."));
+    /// ```
     pub fn as_tnid_string(&self) -> String {
         format!(
             "{}.{}",
@@ -165,25 +380,140 @@ impl<Name: TNIDName> TNID<Name> {
         )
     }
 
-    /// Gets the TNID variant
+    /// Returns the TNID variant.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{TNID, TNIDName, NameStr, TNIDVariant};
+    ///
+    /// struct User;
+    /// impl TNIDName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// let id_v0 = TNID::<User>::new_v0();
+    /// assert_eq!(id_v0.variant(), TNIDVariant::V0);
+    ///
+    /// let id_v1 = TNID::<User>::new_v1();
+    /// assert_eq!(id_v1.variant(), TNIDVariant::V1);
+    /// ```
     pub fn variant(&self) -> TNIDVariant {
         let variant_bits = (self.id >> 60) as u8;
 
         TNIDVariant::from_u8(variant_bits)
     }
 
-    /// Convert to UUID hex string format with specified case
+    /// Converts the TNID to UUID hex string format.
+    ///
+    /// This is useful for UUID compatibility and interoperability with systems that expect
+    /// standard UUID format, or any other case where you need the common UUID hex representation.
+    ///
+    /// # Parameters
+    ///
+    /// - `uppercase`: If `true`, uses uppercase hex digits (A-F). If `false`, uses lowercase (a-f).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{TNID, TNIDName, NameStr};
+    ///
+    /// struct User;
+    /// impl TNIDName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// let id = TNID::<User>::new_v1();
+    ///
+    /// let uuid_lower = id.to_uuid_string_cased(false);
+    /// // "cab1952a-f09d-86d9-928e-96ea03dc6af3"
+    ///
+    /// let uuid_upper = id.to_uuid_string_cased(true);
+    /// // "CAB1952A-F09D-86D9-928E-96EA03DC6AF3"
+    /// ```
     pub fn to_uuid_string_cased(&self, uppercase: bool) -> String {
         UUIDLike::new(self.id).to_uuid_string_cased(uppercase)
     }
 
-    /// Parse a UUID hex string into a TNID
+    /// Parses a TNID from UUID hex string format.
+    ///
+    /// This is the inverse of [`Self::to_uuid_string_cased`].
+    ///
+    /// The parser accepts both uppercase and lowercase hex digits (A-F or a-f).
+    ///
+    /// Returns `None` if:
+    /// - The string is not valid UUID format
+    /// - The UUID is not a valid TNID (wrong version/variant bits or name mismatch)
+    ///
+    /// For inspecting why a UUID might not be a valid TNID, see [`UUIDLike`].
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{TNID, TNIDName, NameStr};
+    ///
+    /// struct User;
+    /// impl TNIDName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// // Create a TNID and convert to UUID string
+    /// let original = TNID::<User>::new_v1();
+    /// let uuid_string = original.to_uuid_string_cased(false);
+    ///
+    /// // Parse it back
+    /// let parsed = TNID::<User>::parse_uuid_string(&uuid_string);
+    /// assert!(parsed.is_some());
+    /// assert_eq!(parsed.unwrap().as_u128(), original.as_u128());
+    ///
+    /// // Also accepts uppercase
+    /// let uuid_upper = original.to_uuid_string_cased(true);
+    /// let parsed_upper = TNID::<User>::parse_uuid_string(&uuid_upper);
+    /// assert!(parsed_upper.is_some());
+    ///
+    /// // Invalid: not a valid UUID format
+    /// assert!(TNID::<User>::parse_uuid_string("not-a-uuid").is_none());
+    /// ```
     pub fn parse_uuid_string(uuid_string: &str) -> Option<Self> {
         let id = UUIDLike::parse_uuid_string(uuid_string)?.as_u128();
 
         Self::from_u128(id)
     }
 
+    /// Parses a TNID from its string representation.
+    ///
+    /// This is the inverse of [`Self::as_tnid_string`]. See that method for details
+    /// on the TNID string format.
+    ///
+    /// Returns `None` if the string is invalid. Validation includes:
+    /// - Correct format (`<name>.<encoded-data>`)
+    /// - Name matches the expected name for this TNID type
+    /// - Valid TNID Data Encoding
+    /// - Correct UUIDv8 version and variant bits
+    ///
+    /// If you need to inspect non-compliant IDs or understand why parsing failed,
+    /// consider using [`UUIDLike`] which provides lower-level access.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{TNID, TNIDName, NameStr};
+    ///
+    /// struct User;
+    /// impl TNIDName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// // Successful parsing
+    /// let parsed = TNID::<User>::parse_tnid_string("user.Br2flcNDfF6LYICnT");
+    /// assert!(parsed.is_some());
+    ///
+    /// // Failed parsing - wrong name
+    /// assert!(TNID::<User>::parse_tnid_string("post.Br2flcNDfF6LYICnT").is_none());
+    ///
+    /// // Failed parsing - invalid format
+    /// assert!(TNID::<User>::parse_tnid_string("not-a-tnid").is_none());
+    /// ```
     pub fn parse_tnid_string(tnid_string: &str) -> Option<Self> {
         // Split on dot separator
         let (name, data_str) = tnid_string.split_once('.')?;
@@ -209,26 +539,85 @@ impl<Name: TNIDName> TNID<Name> {
         Self::from_u128(id)
     }
 
-    pub fn from_u128(num: u128) -> Option<Self> {
+    /// Creates a TNID from a raw 128-bit value.
+    ///
+    /// This is the inverse of [`Self::as_u128`] and is useful for loading TNIDs from
+    /// databases that store UUIDs as u128/binary, interoperating with UUID-based systems,
+    /// or deserializing.
+    ///
+    /// Returns `None` if the value is not a valid TNID. Validation includes:
+    /// - Correct UUIDv8 version and variant bits
+    /// - Name encoding matches the expected name for this TNID type
+    ///
+    /// # Endianness
+    ///
+    /// When loading from bytes, you'll almost certainly want to parse a `[u8; 16]` to a
+    /// `u128` using big-endian byte order with [`u128::from_be_bytes()`], as per the
+    /// UUID specification.
+    pub fn from_u128(id: u128) -> Option<Self> {
         // check UUIDv8 version and variant bits
-        if (num & utils::UUID_V8_MASK) != utils::UUID_V8_MASK {
+        if (id & utils::UUID_V8_MASK) != utils::UUID_V8_MASK {
             return None;
         }
 
         // check name encoding matches expected name
         let name_bits_mask = 0xFFFFF_u128 << 108; // top 20 bits
-        let actual_name_bits = num & name_bits_mask;
+        let actual_name_bits = id & name_bits_mask;
         let expected_name_bits = name_encoding::name_mask(Name::ID_NAME);
         if actual_name_bits != expected_name_bits {
             return None;
         }
 
         Some(Self {
-            id: num,
+            id,
             id_name: PhantomData,
         })
     }
 
+    /// Encrypts a V0 TNID to a V1 TNID using AES-128.
+    ///
+    /// This encrypts the data bits while preserving the name. The encrypted TNID will be
+    /// a valid V1 variant, hiding the timestamp information present in V0. The encryption
+    /// is reversible with [`Self::decrypt_v1_to_v0`] using the same secret.
+    ///
+    /// V0 TNIDs expose when they were created (like UUIDv7), which may not be desirable
+    /// when TNIDs are public. Encrypting to V1 produces a valid high-entropy V1 TNID
+    /// while remaining decryptable on the backend.
+    ///
+    /// # Parameters
+    ///
+    /// - `secret`: 128-bit (16 bytes) encryption key
+    ///
+    /// # Behavior by Input TNID Variant
+    ///
+    /// - **V0**: Encrypts data bits and converts to V1
+    /// - **V1**: Returns the TNID unchanged (already V1)
+    /// - **V2/V3**: Returns `Err(())` (unsupported variants)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{TNID, TNIDName, NameStr, TNIDVariant};
+    ///
+    /// struct User;
+    /// impl TNIDName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// let secret = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+    ///
+    /// let original = TNID::<User>::new_v0();
+    /// assert_eq!(original.variant(), TNIDVariant::V0);
+    ///
+    /// // Encrypt V0 to V1
+    /// let encrypted = original.encrypt_v0_to_v1(secret).unwrap();
+    /// assert_eq!(encrypted.variant(), TNIDVariant::V1);
+    ///
+    /// // Decrypt back to V0
+    /// let decrypted = encrypted.decrypt_v1_to_v0(secret).unwrap();
+    /// assert_eq!(decrypted.variant(), TNIDVariant::V0);
+    /// assert_eq!(decrypted.as_u128(), original.as_u128());
+    /// ```
     #[cfg(feature = "encryption")]
     pub fn encrypt_v0_to_v1(&self, secret: [u8; 16]) -> Result<Self, ()> {
         match self.variant() {
@@ -259,6 +648,41 @@ impl<Name: TNIDName> TNID<Name> {
         })
     }
 
+    /// Decrypts a V1 TNID to a V0 TNID using AES-128.
+    ///
+    /// This is the inverse of [`Self::encrypt_v0_to_v1`]. It decrypts the data bits while
+    /// preserving the name, converting a V1 TNID back to V0 to recover the original ID.
+    ///
+    /// # Parameters
+    ///
+    /// - `secret`: 128-bit (16 bytes) encryption key (must match the key used for encryption)
+    ///
+    /// # Behavior by Input TNID Variant
+    ///
+    /// - **V0**: Returns the TNID unchanged (already V0)
+    /// - **V1**: Decrypts data bits and converts to V0
+    /// - **V2/V3**: Returns `Err(())` (unsupported variants)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{TNID, TNIDName, NameStr, TNIDVariant};
+    ///
+    /// struct User;
+    /// impl TNIDName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// let secret = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+    ///
+    /// let original = TNID::<User>::new_v0();
+    /// let encrypted = original.encrypt_v0_to_v1(secret).unwrap();
+    ///
+    /// // Decrypt back to V0
+    /// let decrypted = encrypted.decrypt_v1_to_v0(secret).unwrap();
+    /// assert_eq!(decrypted.variant(), TNIDVariant::V0);
+    /// assert_eq!(decrypted.as_u128(), original.as_u128());
+    /// ```
     #[cfg(feature = "encryption")]
     pub fn decrypt_v1_to_v0(&self, secret: [u8; 16]) -> Result<Self, ()> {
         match self.variant() {

@@ -29,6 +29,18 @@ impl TNIDVariant {
         }
     }
 
+    /// Returns the u8 representation of this variant.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::TNIDVariant;
+    ///
+    /// assert_eq!(TNIDVariant::V0.as_u8(), 0);
+    /// assert_eq!(TNIDVariant::V1.as_u8(), 1);
+    /// assert_eq!(TNIDVariant::V2.as_u8(), 2);
+    /// assert_eq!(TNIDVariant::V3.as_u8(), 3);
+    /// ```
     pub fn as_u8(&self) -> u8 {
         match self {
             TNIDVariant::V0 => 0,
