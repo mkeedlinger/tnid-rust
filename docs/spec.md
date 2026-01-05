@@ -3,14 +3,17 @@
 TNIDs are based on
 [UUIDv8](https://datatracker.ietf.org/doc/html/rfc9562#name-uuid-version-8).
 **This means that TNIDs should be able to be used anywhere that expects a
-standard UUID.**
+standard UUID.** TNIDs follow the UUIDv8 specification for bit layout, byte
+order (big-endian), and version/variant bits, ensuring full compatibility with
+existing UUID infrastructure.
 
 TNIDs include some extras features that developers may find useful:
 
-- They include a name field, allowing ids of differrent kinds to be
+- They include a name field, allowing ids of different kinds to be
   differentiated at runtime and (in languages that support it) at compile time.
-- They have a string representation that is unambiguous and comparable (unlike
-  UUID's case insensitive hex representation).
+- They have a string representation that is unambiguous, case-sensitive, and
+  lexicographically sortable (unlike UUID's case insensitive hex
+  representation).
 
 ## Bit Layout
 
@@ -45,6 +48,13 @@ Below is the common aspects of all TNID variants.
 ## TNID variants
 
 There are 2 bits that denote the TNID variant, allowing for 4 possible variants.
+
+| TNID Variant | Similar to | Primary Use Case        | Key Feature          |
+| ------------ | ---------- | ----------------------- | -------------------- |
+| Variant 0    | UUIDv7     | Time-ordered IDs        | Millisecond sortable |
+| Variant 1    | UUIDv4     | Maximum randomness      | 100 bits of entropy  |
+| Variant 2    | -          | Reserved for future use | -                    |
+| Variant 3    | -          | Reserved for future use | -                    |
 
 ### Variant 0
 
@@ -102,12 +112,14 @@ Non-goals:
 
 Since the time components have millisecond precision, there is a chance of
 collisions for TNIDs made in the same millisecond. With 57 random bits, if you
-generate 10 billion TNIDv0 IDs per second, there's a .00000069% chance you'll
-get a collision.
+generate 1 million TNIDv0 IDs in the same millisecond, there's a ~0.00035%
+chance of collision.
 
 <details>
 <summary>Math</summary>
-% chance of collision = 10,000,000,000 / 2^57 * 100
+Collision probability follows the birthday paradox: 1 - e^(-n²/2N) where N = 2^57
+
+For 1 million IDs: 1 - e^(-(10^6)²/(2×2^57)) ≈ 0.00035%
 </details>
 
 ##### Hex Sortability
@@ -204,10 +216,13 @@ Additionally, you can represent a TNID using the below representation(s):
 
 **encoded-data**: The [TNID Data Encoding](#tnid-data-encoding) of the (1) TNID
 variant and (2) the TNID Data Bits (see [layout](#bit-layout)). These are taken
-in the order they appear: the first 40 data bits, then the 2 TNID variant bits,
-then then remaining 60 data bits. Must be 17 characters.
+in the order they appear: the first 40 data bits, (skipping the UUID version
+bits) then the 2 TNID variant bits, (skipping the UUID variant bits) then the
+remaining 60 data bits. Must be 17 characters.
 
 Example: `test.Br2flcNDfF6LYICnT`
+
+<!-- TODO: Add examples showing the same TNID in multiple representations (u128, UUID hex, TNID string) and examples of different variants and name lengths -->
 
 ## Encodings
 
@@ -215,19 +230,22 @@ These are the encodings that are used for TNID representations. Both are
 designed such that the ordering of the bit representation matches the ascii
 character representation.
 
-They also make an attempt to use only "safe" characters. For example, the
-encodings are URL safe.
+An attempt was made to use only "safe" characters. For example, all characters
+used in both encodings are URL safe (unreserved characters per
+[RFC 3986](https://www.rfc-editor.org/rfc/rfc3986#section-2.2)), meaning TNIDs
+can be used in URLs without percent-encoding.
 
 ### TNID Name Encoding
 
-TNIDs use a 5 bit character encoding. The ordering was specifically chosen such
-that most systems would sort the character in a way that matches their byte
-representation.
+TNIDs use a 5 bit character encoding. The character ordering (0-4, then a-z) was
+specifically chosen to match ASCII lexicographic sorting, ensuring that TNID
+names sort correctly as both encoded bits and as strings. For example, name "a"
+< "b" < "z" both as characters and in their encoded bit representation.
 
 If a name is less than the maximum 4 characters, then there MUST be nulls
-filling in the unused space. For example, if a name `ab` was encoded, then the
-first 10 bits would be encoded chars, and the remaining 10 bits would all be
-zeroes (nulls).
+filling in the unused space at the end (least significant bits). For example, if
+a name `ab` was encoded, then the first 10 bits (most significant) would be the
+encoded chars, and the remaining 10 bits would all be zeroes (nulls).
 
 | Bits  | Decimal | Char (ascii)      |
 | ----- | ------- | ----------------- |
