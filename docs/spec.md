@@ -7,7 +7,7 @@ standard UUID.** TNIDs follow the UUIDv8 specification for bit layout, byte
 order (big-endian), and version/variant bits, ensuring full compatibility with
 existing UUID infrastructure.
 
-TNIDs include some extras features that developers may find useful:
+TNIDs include some extra features that developers may find useful:
 
 - They include a name field, allowing ids of different kinds to be
   differentiated at runtime and (in languages that support it) at compile time.
@@ -103,7 +103,7 @@ Non-goals:
 - Be useful where collision chances must be astronomically low
 - Be useful for use cases generating extraordinary amounts of IDs in small time
   frames
-- Have the inner represenation (such as the time components) be useful after ID
+- Have the inner representation (such as the time components) be useful after ID
   creation
 
 #### Caveats
@@ -120,6 +120,7 @@ chance of collision.
 Collision probability follows the birthday paradox: 1 - e^(-n²/2N) where N = 2^57
 
 For 1 million IDs: 1 - e^(-(10^6)²/(2×2^57)) ≈ 0.00035%
+
 </details>
 
 ##### Hex Sortability
@@ -129,6 +130,11 @@ and `0xA1` represent the same byte, _but those will not sort the same when
 compared as hex strings_. Therefore, if you rely on the ability to time sort
 TNIDs when represented in hex, ensure consistent casing. **This is also the case
 with UUIDs, or any use of hex encoded data.**
+
+```
+As strings:  "A" (ASCII 65) < "a" (ASCII 97)  →  "0xA1" < "0xa1"
+As values:   0xA1 = 0xa1 = 161
+```
 
 Or better yet, always represent your TNIDs in an unambiguous format like a
 [TNID string](#tnid-string) or as a 128 uint (as Postgres does with its UUID
@@ -247,6 +253,19 @@ filling in the unused space at the end (least significant bits). For example, if
 a name `ab` was encoded, then the first 10 bits (most significant) would be the
 encoded chars, and the remaining 10 bits would all be zeroes (nulls).
 
+```
+"ab" encoded (20 bits):
+
+✓ Valid:   [00110][00111][00000][00000]
+              a      b    null   null
+
+✗ Invalid: [00110][00000][00111][00000]
+              a    null     b    null
+           (non-null after null is invalid)
+```
+
+#### Mapping
+
 | Bits  | Decimal | Char (ascii)      |
 | ----- | ------- | ----------------- |
 | 00000 | 0       | (null-terminator) |
@@ -284,15 +303,36 @@ encoded chars, and the remaining 10 bits would all be zeroes (nulls).
 
 ### TNID Data Encoding
 
-Since there are 102 bits of data that are _not_ the name and _not_ needed to
-reproduce the TNID, they can be divided into 17 six-bit chunks. This lets us use
-a base64<i>-like</i> encoding (but _not_
-[RFC 4648 base64](https://datatracker.ietf.org/doc/html/rfc4648#section-4)). The
-bits needed to reproduce a TNID are the TNID Variant bits and the TNID Data bits
-[layout](#bit-layout).
+This encoding is used for the data portion of a [TNID String](#tnid-string)
+(after the `.`). To reconstruct the full 128-bit TNID from a string, you need
+the TNID Variant and TNID Data bits (see [layout](#bit-layout)) — the name
+appears before the `.`, and the UUID version/variant are constants dictated by
+this spec (and the UUID spec that this complies with). This leaves 102 bits,
+which divides evenly into 17 six-bit chunks (102 = 17 × 6), requiring no
+padding.
 
-Since the TNID data is exactly divisible into 6 bit chunks, there's no need to
-handle padding.
+These 17 chunks are encoded using a base64-_like_ encoding (but _not_
+[RFC 4648 base64](https://datatracker.ietf.org/doc/html/rfc4648#section-4)).
+Below, each symbol (1-9, A-H) represents one of the 17 encoded characters. Since
+6-bit characters don't align with 4-bit nibbles, they overlap at boundaries:
+
+`nnnn.nnnn.nnnn.nnnn.nnnn.1111.1122.2222`-
+
+`3333.3344.4444.5555`-
+
+`vvvv.5566.6666.7777`-
+
+`uutt.8888.8899.9999`-
+
+`AAAA.AABB.BBBB.CCCC.CCDD.DDDD.EEEE.EEFF.FFFF.GGGG.GGHH.HHHH`
+
+- n = Name (20 bits)
+- v = UUID version (4 bits, skipped)
+- u = UUID variant (2 bits, skipped)
+- t = TNID variant (2 bits, last 2 bits of character 7)
+- 1-9, A-H = The 17 encoded characters (6 bits each)
+
+#### Mapping
 
 | Bits   | Decimal | Char (ascii) |
 | ------ | ------- | ------------ |

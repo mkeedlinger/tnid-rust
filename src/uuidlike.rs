@@ -1,16 +1,103 @@
-/// Used when you have 128 bits that *could* be a TNID, but might not be and you want to inspect why it's not conformant
+/// A wrapper for 128-bit values that may or may not be valid TNIDs.
+///
+/// This type provides a way to work with 128-bit UUID-like values without the strict
+/// validation that [`TNID`](crate::TNID) requires. Unlike [`TNID`](crate::TNID), which
+/// only accepts values that conform to the TNID specification (correct UUIDv8 version/variant
+/// bits and valid name encoding), `UUIDLike` accepts any 128-bit value.
+///
+/// This makes `UUIDLike` useful for:
+/// - Inspecting potentially invalid TNIDs to understand why they don't parse
+/// - Converting between different UUID representations (u128, hex strings) without validation
+/// - Working with UUIDs from external systems that may not be TNIDs
+/// - Debugging and troubleshooting TNID-related issues
+///
+/// # Examples
+///
+/// Basic usage:
+/// ```rust
+/// use tnid::UUIDLike;
+///
+/// // Create from any 128-bit value
+/// let uuid_like = UUIDLike::new(0x12345678_1234_1234_1234_123456789abc);
+///
+/// // Convert to different representations
+/// let as_u128 = uuid_like.as_u128();
+/// let as_string = uuid_like.to_uuid_string_cased(false);
+/// ```
+///
+/// Inspecting potentially invalid TNIDs:
+/// ```rust
+/// use tnid::{UUIDLike, TNID, TNIDName, NameStr};
+///
+/// struct User;
+/// impl TNIDName for User {
+///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+/// }
+///
+/// // Parse a UUID string that might not be a valid TNID
+/// let uuid_str = "cab1952a-f09d-86d9-928e-96ea03dc6af3";
+/// let uuid_like = UUIDLike::parse_uuid_string(uuid_str).unwrap();
+///
+/// // Try to convert to TNID - this performs validation
+/// match TNID::<User>::from_u128(uuid_like.as_u128()) {
+///     Some(tnid) => println!("Valid TNID: {}", tnid),
+///     None => println!("Not a valid TNID (wrong version/variant/name)"),
+/// }
+/// ```
 pub struct UUIDLike(u128);
 
 impl UUIDLike {
+    /// Returns the raw 128-bit value.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::UUIDLike;
+    ///
+    /// let uuid_like = UUIDLike::new(0x12345678_1234_1234_1234_123456789abc);
+    /// assert_eq!(uuid_like.as_u128(), 0x12345678_1234_1234_1234_123456789abc);
+    /// ```
     pub fn as_u128(&self) -> u128 {
         self.0
     }
 
+    /// Creates a new `UUIDLike` from a 128-bit value.
+    ///
+    /// Accepts any `u128` value without validation.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::UUIDLike;
+    ///
+    /// let uuid_like = UUIDLike::new(0x12345678_1234_1234_1234_123456789abc);
+    /// assert_eq!(uuid_like.as_u128(), 0x12345678_1234_1234_1234_123456789abc);
+    /// ```
     pub fn new(id: u128) -> Self {
         Self(id)
     }
 
-    /// Convert to UUID hex string format with specified case
+    /// Converts to UUID hex string format with specified case.
+    ///
+    /// Produces the standard UUID format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
+    ///
+    /// # Parameters
+    ///
+    /// - `uppercase`: If `true`, uses uppercase hex digits (A-F). If `false`, uses lowercase (a-f).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::UUIDLike;
+    ///
+    /// let uuid_like = UUIDLike::new(0xCAB1952A_F09D_86D9_928E_96EA03DC6AF3);
+    ///
+    /// let lowercase = uuid_like.to_uuid_string_cased(false);
+    /// assert_eq!(lowercase, "cab1952a-f09d-86d9-928e-96ea03dc6af3");
+    ///
+    /// let uppercase = uuid_like.to_uuid_string_cased(true);
+    /// assert_eq!(uppercase, "CAB1952A-F09D-86D9-928E-96EA03DC6AF3");
+    /// ```
     pub fn to_uuid_string_cased(&self, uppercase: bool) -> String {
         let id = self.0;
 
@@ -34,6 +121,34 @@ impl UUIDLike {
         }
     }
 
+    /// Parses a UUID hex string into a `UUIDLike`.
+    ///
+    /// Accepts the standard UUID format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
+    ///
+    /// Accepts both uppercase and lowercase hex digits. Validates format but not TNID-specific requirements.
+    ///
+    /// Returns `None` if the string is not a valid UUID hex string.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::UUIDLike;
+    ///
+    /// // Parse lowercase
+    /// let uuid = UUIDLike::parse_uuid_string("cab1952a-f09d-86d9-928e-96ea03dc6af3");
+    /// assert!(uuid.is_some());
+    ///
+    /// // Parse uppercase
+    /// let uuid = UUIDLike::parse_uuid_string("CAB1952A-F09D-86D9-928E-96EA03DC6AF3");
+    /// assert!(uuid.is_some());
+    ///
+    /// // Parse mixed case
+    /// let uuid = UUIDLike::parse_uuid_string("CaB1952a-F09D-86d9-928E-96ea03dc6af3");
+    /// assert!(uuid.is_some());
+    ///
+    /// // Invalid format
+    /// assert!(UUIDLike::parse_uuid_string("not-a-uuid").is_none());
+    /// ```
     pub fn parse_uuid_string(uuid_string: &str) -> Option<Self> {
         if uuid_string.len() != 36 {
             return None;

@@ -39,7 +39,8 @@ pub use uuidlike::UUIDLike;
 /// # let _ = TNID::<ExampleName>::new_v0();
 /// ```
 ///
-/// The string you set as `ID_NAME` is checked to be a valid TNID name at compile time (as long as you actually use the )
+/// [`NameStr::new_const`] validates the name at compile time and is the only way to create
+/// a `NameStr<'static>`, ensuring all [`TNID`] names are valid.
 /// ```rust,compile_fail
 /// # use tnid::TNIDName;
 /// # use tnid::TNID;
@@ -57,11 +58,14 @@ pub trait TNIDName {
     const ID_NAME: NameStr<'static>;
 }
 
-/// The base TNID type
+/// A type-safe TNID parameterized by name.
 ///
-/// Makes use of the [`TNIDName`] trait for static checking of the different names
+/// The type parameter uses the [`TNIDName`] trait to enforce compile-time checking of names.
+/// `TNID<User>` and `TNID<Post>` are distinct types that cannot be mixed.
 ///
-/// In general, TNIDs try to be relatively strict about how they can be used and represented at compile time. That means that any given instance of a TNID *should* be valid. In cases where you want to work with or inspect potentially invalid TNIDs, use a [`UUIDLike`].
+/// All validation happens at construction time, so any `TNID<Name>` instance is guaranteed
+/// to be valid. If you need to work with potentially invalid 128-bit values, use [`UUIDLike`]
+/// for inspection without validation.
 #[derive(PartialEq, Eq)]
 pub struct TNID<Name: TNIDName> {
     id_name: PhantomData<Name>,
@@ -162,14 +166,24 @@ impl<Name: TNIDName> TNID<Name> {
         self.id
     }
 
-    /// Same as [`Self::new_v0`], just a more friendly name
+    /// Generates a new time-ordered TNID (alias for [`Self::new_v0`]).
+    ///
+    /// This variant is sortable by creation time, similar to UUIDv7. TNIDs created earlier
+    /// will sort before those created later in all representations (u128, UUID hex, TNID string).
+    ///
+    /// Use this when you need time-based sorting, similar to choosing UUIDv7 over UUIDv4.
     pub fn new_time_ordered() -> Self {
         Self::new_v0()
     }
 
-    /// Generates a new v0 TNID
+    /// Generates a new v0 TNID.
     ///
-    /// This variant focuses on time sortability, similar to UUIDv7
+    /// This variant is time-ordered with millisecond precision, similar to UUIDv7.
+    /// TNIDs created earlier will sort before those created later in all representations
+    /// (u128, UUID hex, and TNID string). The remaining bits are filled with random data.
+    ///
+    /// Use this when you need time-based sorting and want IDs to be roughly chronological,
+    /// similar to choosing UUIDv7 over UUIDv4.
     #[cfg(feature = "time")]
     pub fn new_v0() -> Self {
         Self::new_v0_with_time(time::OffsetDateTime::now_utc())
@@ -201,9 +215,13 @@ impl<Name: TNIDName> TNID<Name> {
         Self::new_v1()
     }
 
-    /// Generates a new v1 TNID
+    /// Generates a new v1 TNID.
     ///
-    /// This variant focuses on maximizing entropy, similar to UUIDv4
+    /// This variant maximizes entropy with 100 bits of random data, similar to UUIDv4.
+    /// This is almost certainly sufficient for most use cases.
+    ///
+    /// Use this when you don't need time-based sorting and want maximum randomness,
+    /// similar to choosing UUIDv4 over UUIDv7.
     #[cfg(feature = "rand")]
     pub fn new_v1() -> Self {
         Self::new_v1_with_random(rand::random())
