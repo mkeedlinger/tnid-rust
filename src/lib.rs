@@ -11,7 +11,6 @@ use std::marker::PhantomData;
 mod data_encoding;
 #[cfg(feature = "encryption")]
 mod encryption;
-mod error;
 mod name_encoding;
 mod tnid_variant;
 mod utils;
@@ -19,7 +18,6 @@ mod uuidlike;
 mod v0;
 mod v1;
 
-pub use error::Error;
 pub use name_encoding::NameStr;
 pub use tnid_variant::TNIDVariant;
 pub use uuidlike::UUIDLike;
