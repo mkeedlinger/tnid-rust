@@ -137,7 +137,6 @@ mod tests {
         assert_eq!(expanded.count_ones(), SECRET_DATA_BIT_NUM.into());
     }
 
-    // todo: review, ai generated
     #[test]
     fn secret_data_roundtrip() {
         // Extract then expand should give back the original (masked)

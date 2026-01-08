@@ -44,7 +44,14 @@
 ///     None => println!("Not a valid TNID (wrong version/variant/name)"),
 /// }
 /// ```
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct UUIDLike(u128);
+
+impl std::fmt::Debug for UUIDLike {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_uuid_string_cased(false))
+    }
+}
 
 impl UUIDLike {
     /// Returns the raw 128-bit value.
@@ -99,26 +106,7 @@ impl UUIDLike {
     /// assert_eq!(uppercase, "CAB1952A-F09D-86D9-928E-96EA03DC6AF3");
     /// ```
     pub fn to_uuid_string_cased(&self, uppercase: bool) -> String {
-        let id = self.0;
-
-        // Format as UUID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-        let first_section = (id >> 96) as u32;
-        let second_section = ((id >> 80) & 0xffff) as u16;
-        let third_section = ((id >> 64) & 0xffff) as u16;
-        let fourth_section = ((id >> 48) & 0xffff) as u16;
-        let fifth_section = (id & 0xffffffffffff) as u64;
-
-        if uppercase {
-            format!(
-                "{:08X}-{:04X}-{:04X}-{:04X}-{:012X}",
-                first_section, second_section, third_section, fourth_section, fifth_section
-            )
-        } else {
-            format!(
-                "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
-                first_section, second_section, third_section, fourth_section, fifth_section
-            )
-        }
+        crate::utils::u128_to_uuid_string(self.0, uppercase)
     }
 
     /// Parses a UUID hex string into a `UUIDLike`.

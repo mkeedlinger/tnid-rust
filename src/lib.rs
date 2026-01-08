@@ -1,10 +1,107 @@
+//! # TNID
+//!
+//! **T**ype-checked, **N**amed **ID**s that are fully compatible with UUIDs.
+//!
+//! TNID ("Typed Named ID", pronounced "tee-nid") embeds a human-readable name directly into
+//! a UUID-compatible 128-bit identifier. Each TNID carries a 1-4 character type name (like
+//! "user" or "post") that's validated at compile time, preventing you from accidentally
+//! mixing up IDs for different entity types.
+//!
+//! # Quick Start
+//!
+//! ```rust
+//! use tnid::{TNID, TNIDName, NameStr};
+//!
+//! // Define a name type for your entity
+//! struct User;
+//! impl TNIDName for User {
+//!     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+//! }
+//!
+//! // Generate IDs
+//! let id = TNID::<User>::new_v0();  // Time-ordered (like UUIDv7)
+//!
+//! // Display as a TNID string
+//! println!("{}", id);  // e.g., "user.Br2flcNDfF6LYICnT"
+//!
+//! // Or as a standard UUID for database storage
+//! let uuid_str = id.to_uuid_string_cased(false);
+//! // e.g., "cab1952a-f09d-86d9-928e-96ea03dc6af3"
+//! ```
+//!
+//! # Why TNIDs?
+//!
+//! TNIDs solve several common problems with plain UUIDs:
+//!
+//! - **Type Safety**: `TNID<User>` and `TNID<Post>` are different types. You can't accidentally
+//!   pass a post ID where a user ID is expected.
+//! - **Human Readable**: The TNID string format (`user.Br2flcNDfF6LYICnT`) tells you at a
+//!   glance what kind of entity the ID refers to.
+//! - **UUID Compatible**: Every TNID is a valid UUIDv8, so it works with existing UUID columns
+//!   in databases and UUID-based APIs.
+//!
+//! # TNID Variants
+//!
+//! Like UUID versions, TNIDs come in different variants:
+//!
+//! - **V0** ([`TNID::new_v0`]) - Time-ordered with millisecond precision (like UUIDv7).
+//!   Use when you want IDs to sort chronologically.
+//! - **V1** ([`TNID::new_v1`]) - High-entropy random (like UUIDv4).
+//!   Use when you want maximum randomness without time information.
+//!
+//! See [`TNIDVariant`] for details.
+//!
+//! # String Representations
+//!
+//! TNIDs support two string formats:
+//!
+//! - **TNID format** (`user.Br2flcNDfF6LYICnT`): Human-readable, sortable, unambiguous
+//! - **UUID format** (`cab1952a-f09d-86d9-928e-96ea03dc6af3`): Standard UUID hex for compatibility
+//!
+//! ```rust
+//! # use tnid::{TNID, TNIDName, NameStr};
+//! # struct User;
+//! # impl TNIDName for User {
+//! #     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+//! # }
+//! let id = TNID::<User>::new_v1();
+//!
+//! // TNID string (for APIs, logs, user-facing contexts)
+//! let tnid_str = id.as_tnid_string();
+//!
+//! // UUID string (for databases, UUID-based systems)
+//! let uuid_str = id.to_uuid_string_cased(false);
+//!
+//! // Parse back
+//! let from_tnid = TNID::<User>::parse_tnid_string(&tnid_str);
+//! let from_uuid = TNID::<User>::parse_uuid_string(&uuid_str);
+//! ```
+//!
+//! # Feature Flags
+//!
+//! | Feature | Default | Description |
+//! |---------|---------|-------------|
+//! | `time` | ✓ | Enables [`TNID::new_v0`] with automatic timestamps |
+//! | `rand` | ✓ | Enables [`TNID::new_v0`] and [`TNID::new_v1`] with automatic randomness |
+//! | `encryption` | | Enables [`TNID::encrypt_v0_to_v1`] and [`TNID::decrypt_v1_to_v0`] for hiding timestamps |
+//! | `uuid` | | Integration with the [`uuid`](https://docs.rs/uuid) crate |
+//!
+//! Without the default features, you can still create TNIDs using explicit components:
+//! - [`TNID::new_v0_with_parts`] - Provide your own timestamp and random bits
+//! - [`TNID::new_v1_with_random`] - Provide your own random bits
+//!
+//! # Reliability
+//!
+//! This crate is designed to never panic in normal use. All functions that could potentially
+//! panic are fuzz tested with randomized inputs to verify they don't. Extensive unit tests
+//! verify correctness of encoding, sorting, and round-trip conversions.
+
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::indexing_slicing)]
 #![deny(rustdoc::broken_intra_doc_links)]
-
-// todo
-// #![warn(missing_docs)]
+#![warn(missing_docs)]
 
 use std::marker::PhantomData;
 
@@ -66,7 +163,7 @@ pub trait TNIDName {
 /// All validation happens at construction time, so any `TNID<Name>` instance is guaranteed
 /// to be valid. If you need to work with potentially invalid 128-bit values, use [`UUIDLike`]
 /// for inspection without validation.
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TNID<Name: TNIDName> {
     id_name: PhantomData<Name>,
     id: u128,
@@ -450,7 +547,7 @@ impl<Name: TNIDName> TNID<Name> {
     /// // "CAB1952A-F09D-86D9-928E-96EA03DC6AF3"
     /// ```
     pub fn to_uuid_string_cased(&self, uppercase: bool) -> String {
-        UUIDLike::new(self.id).to_uuid_string_cased(uppercase)
+        utils::u128_to_uuid_string(self.id, uppercase)
     }
 
     /// Parses a TNID from UUID hex string format.

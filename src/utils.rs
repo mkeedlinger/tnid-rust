@@ -22,6 +22,27 @@ pub fn change_variant(id: u128, to_variant: TNIDVariant) -> u128 {
     id_without_variant | (new_variant << 60)
 }
 
+pub fn u128_to_uuid_string(id: u128, uppercase: bool) -> String {
+    // Format as UUID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    let first_section = (id >> 96) as u32;
+    let second_section = ((id >> 80) & 0xffff) as u16;
+    let third_section = ((id >> 64) & 0xffff) as u16;
+    let fourth_section = ((id >> 48) & 0xffff) as u16;
+    let fifth_section = (id & 0xffffffffffff) as u64;
+
+    if uppercase {
+        format!(
+            "{:08X}-{:04X}-{:04X}-{:04X}-{:012X}",
+            first_section, second_section, third_section, fourth_section, fifth_section
+        )
+    } else {
+        format!(
+            "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
+            first_section, second_section, third_section, fourth_section, fifth_section
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

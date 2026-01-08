@@ -28,3 +28,11 @@ encryption = ["dep:aes", "dep:fpe"]
 time = ["dep:time"]
 rand = ["dep:rand"]
 uuid = ["dep:uuid"]
+
+# docs.rs-specific configuration
+# https://docs.rs/about/metadata
+[package.metadata.docs.rs]
+# Build docs with all features so gated items (like encryption) appear
+all-features = true
+# Enable the `docsrs` cfg so `doc_auto_cfg` activates (see lib.rs)
+rustdoc-args = ["--cfg", "docsrs"]
