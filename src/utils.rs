@@ -1,4 +1,4 @@
-use crate::TNIDVariant;
+use crate::TnidVariant;
 
 pub const UUID_V8_MASK: u128 = 0x00000000_0000_8000_8000_000000000000;
 
@@ -11,7 +11,7 @@ pub fn uuid_and_variant_mask(tnid_variant: u8) -> u128 {
     UUID_V8_MASK | (variant << 60)
 }
 
-pub fn change_variant(id: u128, to_variant: TNIDVariant) -> u128 {
+pub fn change_variant(id: u128, to_variant: TnidVariant) -> u128 {
     // Clear the old variant bits (bits 60-61)
     let variant_mask = 0b11u128 << 60;
     let id_without_variant = id & !variant_mask;

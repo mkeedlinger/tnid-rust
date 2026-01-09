@@ -133,7 +133,7 @@ impl<'a> NameStr<'a> {
     /// Creates a new `NameStr` with compile-time validation when used in a const context.
     ///
     /// This method performs validation and will panic if the name is invalid. When used
-    /// in a const context (like defining a [`TNIDName`](crate::TNIDName) implementation),
+    /// in a const context (like defining a [`TnidName`](crate::TnidName) implementation),
     /// the panic will occur at compile time. If used at runtime, it will panic the program.
     ///
     /// **Prefer using [`new()`](Self::new) for runtime validation** which returns an `Option`
@@ -149,11 +149,11 @@ impl<'a> NameStr<'a> {
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::{NameStr, TNIDName};
+    /// use tnid::{NameStr, TnidName};
     ///
     /// // Used in a const context for TNIDName (validated at compile time)
     /// struct User;
-    /// impl TNIDName for User {
+    /// impl TnidName for User {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     /// ```
@@ -163,7 +163,7 @@ impl<'a> NameStr<'a> {
     /// use tnid::{NameStr, TNIDName, TNID};
     ///
     /// struct Invalid;
-    /// impl TNIDName for Invalid {
+    /// impl TnidName for Invalid {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("INVALID");
     /// }
     ///

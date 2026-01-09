@@ -1,7 +1,7 @@
 /// A wrapper for 128-bit values that may or may not be valid TNIDs.
 ///
 /// This type provides a way to work with 128-bit UUID-like values without the strict
-/// validation that [`TNID`](crate::TNID) requires. Unlike [`TNID`](crate::TNID), which
+/// validation that [`Tnid`](crate::Tnid) requires. Unlike [`Tnid`](crate::Tnid), which
 /// only accepts values that conform to the TNID specification (correct UUIDv8 version/variant
 /// bits and valid name encoding), `UUIDLike` accepts any 128-bit value.
 ///
@@ -27,10 +27,10 @@
 ///
 /// Inspecting potentially invalid TNIDs:
 /// ```rust
-/// use tnid::{UUIDLike, TNID, TNIDName, NameStr};
+/// use tnid::{UUIDLike, Tnid, TnidName, NameStr};
 ///
 /// struct User;
-/// impl TNIDName for User {
+/// impl TnidName for User {
 ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
 /// }
 ///
@@ -39,7 +39,7 @@
 /// let uuid_like = UUIDLike::parse_uuid_string(uuid_str).unwrap();
 ///
 /// // Try to convert to TNID - this performs validation
-/// match TNID::<User>::from_u128(uuid_like.as_u128()) {
+/// match Tnid::<User>::from_u128(uuid_like.as_u128()) {
 ///     Some(tnid) => println!("Valid TNID: {}", tnid),
 ///     None => println!("Not a valid TNID (wrong version/variant/name)"),
 /// }

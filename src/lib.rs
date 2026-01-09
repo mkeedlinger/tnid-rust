@@ -10,16 +10,16 @@
 //! # Quick Start
 //!
 //! ```rust
-//! use tnid::{TNID, TNIDName, NameStr};
+//! use tnid::{Tnid, TnidName, NameStr};
 //!
 //! // Define a name type for your entity
 //! struct User;
-//! impl TNIDName for User {
+//! impl TnidName for User {
 //!     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
 //! }
 //!
 //! // Generate IDs
-//! let id = TNID::<User>::new_v0();  // Time-ordered (like UUIDv7)
+//! let id = Tnid::<User>::new_v0();  // Time-ordered (like UUIDv7)
 //!
 //! // Display as a TNID string
 //! println!("{}", id);  // e.g., "user.Br2flcNDfF6LYICnT"
@@ -33,7 +33,7 @@
 //!
 //! TNIDs solve several common problems with plain UUIDs:
 //!
-//! - **Type Safety**: `TNID<User>` and `TNID<Post>` are different types. You can't accidentally
+//! - **Type Safety**: `Tnid<User>` and `Tnid<Post>` are different types. You can't accidentally
 //!   pass a post ID where a user ID is expected.
 //! - **Human Readable**: The TNID string format (`user.Br2flcNDfF6LYICnT`) tells you at a
 //!   glance what kind of entity the ID refers to.
@@ -44,12 +44,12 @@
 //!
 //! Like UUID versions, TNIDs come in different variants:
 //!
-//! - **V0** ([`TNID::new_v0`]) - Time-ordered with millisecond precision (like UUIDv7).
+//! - **V0** ([`Tnid::new_v0`]) - Time-ordered with millisecond precision (like UUIDv7).
 //!   Use when you want IDs to sort chronologically.
-//! - **V1** ([`TNID::new_v1`]) - High-entropy random (like UUIDv4).
+//! - **V1** ([`Tnid::new_v1`]) - High-entropy random (like UUIDv4).
 //!   Use when you want maximum randomness without time information.
 //!
-//! See [`TNIDVariant`] for details.
+//! See [`TnidVariant`] for details.
 //!
 //! # String Representations
 //!
@@ -59,12 +59,12 @@
 //! - **UUID format** (`cab1952a-f09d-86d9-928e-96ea03dc6af3`): Standard UUID hex for compatibility
 //!
 //! ```rust
-//! # use tnid::{TNID, TNIDName, NameStr};
+//! # use tnid::{Tnid, TnidName, NameStr};
 //! # struct User;
-//! # impl TNIDName for User {
+//! # impl TnidName for User {
 //! #     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
 //! # }
-//! let id = TNID::<User>::new_v1();
+//! let id = Tnid::<User>::new_v1();
 //!
 //! // TNID string (for APIs, logs, user-facing contexts)
 //! let tnid_str = id.as_tnid_string();
@@ -73,22 +73,22 @@
 //! let uuid_str = id.to_uuid_string_cased(false);
 //!
 //! // Parse back
-//! let from_tnid = TNID::<User>::parse_tnid_string(&tnid_str);
-//! let from_uuid = TNID::<User>::parse_uuid_string(&uuid_str);
+//! let from_tnid = Tnid::<User>::parse_tnid_string(&tnid_str);
+//! let from_uuid = Tnid::<User>::parse_uuid_string(&uuid_str);
 //! ```
 //!
 //! # Feature Flags
 //!
 //! | Feature | Default | Description |
 //! |---------|---------|-------------|
-//! | `time` | ✓ | Enables [`TNID::new_v0`] with automatic timestamps |
-//! | `rand` | ✓ | Enables [`TNID::new_v0`] and [`TNID::new_v1`] with automatic randomness |
-//! | `encryption` | | Enables [`TNID::encrypt_v0_to_v1`] and [`TNID::decrypt_v1_to_v0`] for hiding timestamps |
+//! | `time` | ✓ | Enables [`Tnid::new_v0`] with automatic timestamps |
+//! | `rand` | ✓ | Enables [`Tnid::new_v0`] and [`Tnid::new_v1`] with automatic randomness |
+//! | `encryption` | | Enables [`Tnid::encrypt_v0_to_v1`] and [`Tnid::decrypt_v1_to_v0`] for hiding timestamps |
 //! | `uuid` | | Integration with the [`uuid`](https://docs.rs/uuid) crate |
 //!
 //! Without the default features, you can still create TNIDs using explicit components:
-//! - [`TNID::new_v0_with_parts`] - Provide your own timestamp and random bits
-//! - [`TNID::new_v1_with_random`] - Provide your own random bits
+//! - [`Tnid::new_v0_with_parts`] - Provide your own timestamp and random bits
+//! - [`Tnid::new_v1_with_random`] - Provide your own random bits
 //!
 //! # Reliability
 //!
@@ -118,82 +118,82 @@ mod v0;
 mod v1;
 
 pub use name_encoding::NameStr;
-pub use tnid_variant::TNIDVariant;
+pub use tnid_variant::TnidVariant;
 pub use uuidlike::UUIDLike;
 
 /// Intended to be used on empty structs to create type checked TNID names.
 ///
 /// ```rust
-/// # use tnid::TNIDName;
-/// # use tnid::TNID;
+/// # use tnid::TnidName;
+/// # use tnid::Tnid;
 /// # use tnid::NameStr;
 ///
 /// struct ExampleName;
-/// impl TNIDName for ExampleName {
+/// impl TnidName for ExampleName {
 ///     const ID_NAME: NameStr<'static> = NameStr::new_const("exna");
 /// }
 ///
-/// # let _ = TNID::<ExampleName>::new_v0();
+/// # let _ = Tnid::<ExampleName>::new_v0();
 /// ```
 ///
 /// [`NameStr::new_const`] validates the name at compile time and is the only way to create
-/// a `NameStr<'static>`, ensuring all [`TNID`] names are valid.
+/// a `NameStr<'static>`, ensuring all [`Tnid`] names are valid.
 /// ```rust,compile_fail
-/// # use tnid::TNIDName;
-/// # use tnid::TNID;
+/// # use tnid::TnidName;
+/// # use tnid::Tnid;
 /// # use tnid::NameStr;
 ///
 /// struct InvalidName;
-/// impl TNIDName for InvalidName {
+/// impl TnidName for InvalidName {
 ///     const ID_NAME: NameStr<'static> = NameStr::new_const("2long");
 /// }
 ///
-/// # let _ = TNID::<InvalidName>::new_v0();
+/// # let _ = Tnid::<InvalidName>::new_v0();
 /// ```
-pub trait TNIDName {
+pub trait TnidName {
     /// Must be overridden with the name of your ID
     const ID_NAME: NameStr<'static>;
 }
 
 /// A type-safe TNID parameterized by name.
 ///
-/// The type parameter uses the [`TNIDName`] trait to enforce compile-time checking of names.
-/// `TNID<User>` and `TNID<Post>` are distinct types that cannot be mixed.
+/// The type parameter uses the [`TnidName`] trait to enforce compile-time checking of names.
+/// `Tnid<User>` and `Tnid<Post>` are distinct types that cannot be mixed.
 ///
-/// All validation happens at construction time, so any `TNID<Name>` instance is guaranteed
+/// All validation happens at construction time, so any `Tnid<Name>` instance is guaranteed
 /// to be valid. If you need to work with potentially invalid 128-bit values, use [`UUIDLike`]
 /// for inspection without validation.
 #[derive(PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct TNID<Name: TNIDName> {
+pub struct Tnid<Name: TnidName> {
     id_name: PhantomData<Name>,
     id: u128,
 }
 
-impl<Name: TNIDName> Copy for TNID<Name> {}
+impl<Name: TnidName> Copy for Tnid<Name> {}
 
-impl<Name: TNIDName> Clone for TNID<Name> {
+impl<Name: TnidName> Clone for Tnid<Name> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<Name: TNIDName> TNID<Name> {
+impl<Name: TnidName> Tnid<Name> {
     /// Returns the name associated with this TNID type.
     ///
-    /// The name comes from the [`TNIDName`] implementation for this type and is
+    /// The name comes from the [`TnidName`] implementation for this type and is
     /// used in the TNID string representation (`<name>.<data>`).
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::{TNID, TNIDName, NameStr};
+    /// use tnid::{Tnid, TnidName, NameStr};
     ///
     /// struct User;
-    /// impl TNIDName for User {
+    /// impl TnidName for User {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
-    /// let id = TNID::<User>::new_v0();
+    /// let id = Tnid::<User>::new_v0();
     /// assert_eq!(id.name(), "user");
     /// ```
     pub fn name(&self) -> &'static str {
@@ -212,15 +212,15 @@ impl<Name: TNIDName> TNID<Name> {
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::{TNID, TNIDName, NameStr};
+    /// use tnid::{Tnid, TnidName, NameStr};
     ///
     /// struct Test;
-    /// impl TNIDName for Test {
+    /// impl TnidName for Test {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("test");
     /// }
     ///
     /// // Check what "test" looks like in hex (any TNID instance works)
-    /// let id = TNID::<Test>::new_v1();
+    /// let id = Tnid::<Test>::new_v1();
     /// assert_eq!(id.name_hex(), "cab19");
     /// ```
     pub fn name_hex(&self) -> String {
@@ -246,14 +246,14 @@ impl<Name: TNIDName> TNID<Name> {
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::{TNID, TNIDName, NameStr};
+    /// use tnid::{Tnid, TnidName, NameStr};
     ///
     /// struct User;
-    /// impl TNIDName for User {
+    /// impl TnidName for User {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
-    /// let id = TNID::<User>::new_v0();
+    /// let id = Tnid::<User>::new_v0();
     /// let as_u128 = id.as_u128();
     ///
     /// // Convert to big-endian bytes for storage/transmission
@@ -298,14 +298,14 @@ impl<Name: TNIDName> TNID<Name> {
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::{TNID, TNIDName, NameStr};
+    /// use tnid::{Tnid, TnidName, NameStr};
     ///
     /// struct User;
-    /// impl TNIDName for User {
+    /// impl TnidName for User {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
-    /// let id = TNID::<User>::new_high_entropy();
+    /// let id = Tnid::<User>::new_high_entropy();
     /// ```
     #[cfg(feature = "rand")]
     pub fn new_high_entropy() -> Self {
@@ -339,17 +339,17 @@ impl<Name: TNIDName> TNID<Name> {
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::{TNID, TNIDName, NameStr};
+    /// use tnid::{Tnid, TnidName, NameStr};
     ///
     /// struct User;
-    /// impl TNIDName for User {
+    /// impl TnidName for User {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
     /// // Provide your own randomness
     /// let random_bits = 0x0123456789ABCDEF0123456789ABCDEF;
     ///
-    /// let id = TNID::<User>::new_v1_with_random(random_bits);
+    /// let id = Tnid::<User>::new_v1_with_random(random_bits);
     /// ```
     pub fn new_v1_with_random(random_bits: u128) -> Self {
         let id_name = Name::ID_NAME;
@@ -374,25 +374,25 @@ impl<Name: TNIDName> TNID<Name> {
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::{TNID, TNIDName, NameStr};
+    /// use tnid::{Tnid, TnidName, NameStr};
     /// use time::OffsetDateTime;
     ///
     /// struct User;
-    /// impl TNIDName for User {
+    /// impl TnidName for User {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
     /// let timestamp = OffsetDateTime::now_utc();
-    /// let id = TNID::<User>::new_v0_with_time(timestamp);
+    /// let id = Tnid::<User>::new_v0_with_time(timestamp);
     /// ```
     ///
     /// Demonstrating time-based sorting:
     /// ```rust
-    /// use tnid::{TNID, TNIDName, NameStr};
+    /// use tnid::{Tnid, TnidName, NameStr};
     /// use time::{OffsetDateTime, Duration};
     ///
     /// struct User;
-    /// impl TNIDName for User {
+    /// impl TnidName for User {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
@@ -400,9 +400,9 @@ impl<Name: TNIDName> TNID<Name> {
     /// let earlier = now - Duration::hours(1);
     /// let later = now + Duration::hours(1);
     ///
-    /// let id1 = TNID::<User>::new_v0_with_time(earlier);
-    /// let id2 = TNID::<User>::new_v0_with_time(now);
-    /// let id3 = TNID::<User>::new_v0_with_time(later);
+    /// let id1 = Tnid::<User>::new_v0_with_time(earlier);
+    /// let id2 = Tnid::<User>::new_v0_with_time(now);
+    /// let id3 = Tnid::<User>::new_v0_with_time(later);
     ///
     /// // Earlier times sort before later times
     /// assert!(id1.as_u128() < id2.as_u128());
@@ -439,10 +439,10 @@ impl<Name: TNIDName> TNID<Name> {
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::{TNID, TNIDName, NameStr};
+    /// use tnid::{Tnid, TnidName, NameStr};
     ///
     /// struct User;
-    /// impl TNIDName for User {
+    /// impl TnidName for User {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
@@ -450,7 +450,7 @@ impl<Name: TNIDName> TNID<Name> {
     /// let timestamp_ms = 1750118400000;
     /// let random_bits = 42;
     ///
-    /// let id = TNID::<User>::new_v0_with_parts(timestamp_ms, random_bits);
+    /// let id = Tnid::<User>::new_v0_with_parts(timestamp_ms, random_bits);
     /// ```
     pub fn new_v0_with_parts(epoch_millis: u64, random: u64) -> Self {
         Self {
@@ -473,14 +473,14 @@ impl<Name: TNIDName> TNID<Name> {
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::{TNID, TNIDName, NameStr};
+    /// use tnid::{Tnid, TnidName, NameStr};
     ///
     /// struct User;
-    /// impl TNIDName for User {
+    /// impl TnidName for User {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
-    /// let id = TNID::<User>::new_v0();
+    /// let id = Tnid::<User>::new_v0();
     /// let tnid_string = id.as_tnid_string();
     ///
     /// // Format: <name>.<encoded-data>
@@ -500,23 +500,23 @@ impl<Name: TNIDName> TNID<Name> {
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::{TNID, TNIDName, NameStr, TNIDVariant};
+    /// use tnid::{Tnid, TnidName, NameStr, TnidVariant};
     ///
     /// struct User;
-    /// impl TNIDName for User {
+    /// impl TnidName for User {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
-    /// let id_v0 = TNID::<User>::new_v0();
-    /// assert_eq!(id_v0.variant(), TNIDVariant::V0);
+    /// let id_v0 = Tnid::<User>::new_v0();
+    /// assert_eq!(id_v0.variant(), TnidVariant::V0);
     ///
-    /// let id_v1 = TNID::<User>::new_v1();
-    /// assert_eq!(id_v1.variant(), TNIDVariant::V1);
+    /// let id_v1 = Tnid::<User>::new_v1();
+    /// assert_eq!(id_v1.variant(), TnidVariant::V1);
     /// ```
-    pub fn variant(&self) -> TNIDVariant {
+    pub fn variant(&self) -> TnidVariant {
         let variant_bits = (self.id >> 60) as u8;
 
-        TNIDVariant::from_u8(variant_bits)
+        TnidVariant::from_u8(variant_bits)
     }
 
     /// Converts the TNID to UUID hex string format.
@@ -531,14 +531,14 @@ impl<Name: TNIDName> TNID<Name> {
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::{TNID, TNIDName, NameStr};
+    /// use tnid::{Tnid, TnidName, NameStr};
     ///
     /// struct User;
-    /// impl TNIDName for User {
+    /// impl TnidName for User {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
-    /// let id = TNID::<User>::new_v1();
+    /// let id = Tnid::<User>::new_v1();
     ///
     /// let uuid_lower = id.to_uuid_string_cased(false);
     /// // "cab1952a-f09d-86d9-928e-96ea03dc6af3"
@@ -565,29 +565,29 @@ impl<Name: TNIDName> TNID<Name> {
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::{TNID, TNIDName, NameStr};
+    /// use tnid::{Tnid, TnidName, NameStr};
     ///
     /// struct User;
-    /// impl TNIDName for User {
+    /// impl TnidName for User {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
     /// // Create a TNID and convert to UUID string
-    /// let original = TNID::<User>::new_v1();
+    /// let original = Tnid::<User>::new_v1();
     /// let uuid_string = original.to_uuid_string_cased(false);
     ///
     /// // Parse it back
-    /// let parsed = TNID::<User>::parse_uuid_string(&uuid_string);
+    /// let parsed = Tnid::<User>::parse_uuid_string(&uuid_string);
     /// assert!(parsed.is_some());
     /// assert_eq!(parsed.unwrap().as_u128(), original.as_u128());
     ///
     /// // Also accepts uppercase
     /// let uuid_upper = original.to_uuid_string_cased(true);
-    /// let parsed_upper = TNID::<User>::parse_uuid_string(&uuid_upper);
+    /// let parsed_upper = Tnid::<User>::parse_uuid_string(&uuid_upper);
     /// assert!(parsed_upper.is_some());
     ///
     /// // Invalid: not a valid UUID format
-    /// assert!(TNID::<User>::parse_uuid_string("not-a-uuid").is_none());
+    /// assert!(Tnid::<User>::parse_uuid_string("not-a-uuid").is_none());
     /// ```
     pub fn parse_uuid_string(uuid_string: &str) -> Option<Self> {
         let id = UUIDLike::parse_uuid_string(uuid_string)?.as_u128();
@@ -612,22 +612,22 @@ impl<Name: TNIDName> TNID<Name> {
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::{TNID, TNIDName, NameStr};
+    /// use tnid::{Tnid, TnidName, NameStr};
     ///
     /// struct User;
-    /// impl TNIDName for User {
+    /// impl TnidName for User {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
     /// // Successful parsing
-    /// let parsed = TNID::<User>::parse_tnid_string("user.Br2flcNDfF6LYICnT");
+    /// let parsed = Tnid::<User>::parse_tnid_string("user.Br2flcNDfF6LYICnT");
     /// assert!(parsed.is_some());
     ///
     /// // Failed parsing - wrong name
-    /// assert!(TNID::<User>::parse_tnid_string("post.Br2flcNDfF6LYICnT").is_none());
+    /// assert!(Tnid::<User>::parse_tnid_string("post.Br2flcNDfF6LYICnT").is_none());
     ///
     /// // Failed parsing - invalid format
-    /// assert!(TNID::<User>::parse_tnid_string("not-a-tnid").is_none());
+    /// assert!(Tnid::<User>::parse_tnid_string("not-a-tnid").is_none());
     /// ```
     pub fn parse_tnid_string(tnid_string: &str) -> Option<Self> {
         // Split on dot separator
@@ -710,18 +710,18 @@ impl<Name: TNIDName> TNID<Name> {
     /// # Example
     ///
     /// ```rust
-    /// use tnid::{TNID, TNIDName, NameStr, TNIDVariant};
+    /// use tnid::{Tnid, TnidName, NameStr, TNIDVariant};
     ///
     /// struct User;
-    /// impl TNIDName for User {
+    /// impl TnidName for User {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
     /// let secret = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
     ///
-    /// let original = TNID::<User>::new_v0();
+    /// let original = Tnid::<User>::new_v0();
     /// let encrypted = original.encrypt_v0_to_v1(secret).unwrap();
-    /// assert_eq!(encrypted.variant(), TNIDVariant::V1);
+    /// assert_eq!(encrypted.variant(), TnidVariant::V1);
     ///
     /// let decrypted = encrypted.decrypt_v1_to_v0(secret).unwrap();
     /// assert_eq!(decrypted.as_u128(), original.as_u128());
@@ -729,10 +729,10 @@ impl<Name: TNIDName> TNID<Name> {
     #[cfg(feature = "encryption")]
     pub fn encrypt_v0_to_v1(&self, key: impl Into<encryption::EncryptionKey>) -> Result<Self, ()> {
         match self.variant() {
-            TNIDVariant::V0 => {}
-            TNIDVariant::V1 => return Ok(*self),
-            TNIDVariant::V2 => return Err(()),
-            TNIDVariant::V3 => return Err(()),
+            TnidVariant::V0 => {}
+            TnidVariant::V1 => return Ok(*self),
+            TnidVariant::V2 => return Err(()),
+            TnidVariant::V3 => return Err(()),
         }
 
         // Extract only the secret data bits (100 bits, excludes TNID variant)
@@ -748,7 +748,7 @@ impl<Name: TNIDName> TNID<Name> {
         let id = (self.id & !encryption::COMPLETE_SECRET_DATA_MASK) | expanded;
 
         // Change variant from V0 to V1
-        let id = utils::change_variant(id, TNIDVariant::V1);
+        let id = utils::change_variant(id, TnidVariant::V1);
 
         Ok(Self {
             id_name: PhantomData,
@@ -774,29 +774,29 @@ impl<Name: TNIDName> TNID<Name> {
     /// # Example
     ///
     /// ```rust
-    /// use tnid::{TNID, TNIDName, NameStr, TNIDVariant};
+    /// use tnid::{Tnid, TnidName, NameStr, TNIDVariant};
     ///
     /// struct User;
-    /// impl TNIDName for User {
+    /// impl TnidName for User {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
     /// let secret = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
     ///
-    /// let original = TNID::<User>::new_v0();
+    /// let original = Tnid::<User>::new_v0();
     /// let encrypted = original.encrypt_v0_to_v1(secret).unwrap();
     ///
     /// let decrypted = encrypted.decrypt_v1_to_v0(secret).unwrap();
-    /// assert_eq!(decrypted.variant(), TNIDVariant::V0);
+    /// assert_eq!(decrypted.variant(), TnidVariant::V0);
     /// assert_eq!(decrypted.as_u128(), original.as_u128());
     /// ```
     #[cfg(feature = "encryption")]
     pub fn decrypt_v1_to_v0(&self, key: impl Into<encryption::EncryptionKey>) -> Result<Self, ()> {
         match self.variant() {
-            TNIDVariant::V0 => return Ok(*self),
-            TNIDVariant::V1 => {}
-            TNIDVariant::V2 => return Err(()),
-            TNIDVariant::V3 => return Err(()),
+            TnidVariant::V0 => return Ok(*self),
+            TnidVariant::V1 => {}
+            TnidVariant::V2 => return Err(()),
+            TnidVariant::V3 => return Err(()),
         }
 
         // Extract only the secret data bits (100 bits, excludes TNID variant)
@@ -812,7 +812,7 @@ impl<Name: TNIDName> TNID<Name> {
         let id = (self.id & !encryption::COMPLETE_SECRET_DATA_MASK) | expanded;
 
         // Change variant from V1 to V0
-        let id = utils::change_variant(id, TNIDVariant::V0);
+        let id = utils::change_variant(id, TnidVariant::V0);
 
         Ok(Self {
             id_name: PhantomData,
@@ -821,13 +821,13 @@ impl<Name: TNIDName> TNID<Name> {
     }
 }
 
-impl<Name: TNIDName> std::fmt::Display for TNID<Name> {
+impl<Name: TnidName> std::fmt::Display for Tnid<Name> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_tnid_string())
     }
 }
 
-impl<Name: TNIDName> std::fmt::Debug for TNID<Name> {
+impl<Name: TnidName> std::fmt::Debug for Tnid<Name> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_tnid_string())
     }
@@ -838,7 +838,7 @@ mod tests {
     use super::*;
 
     struct TestId;
-    impl TNIDName for TestId {
+    impl TnidName for TestId {
         const ID_NAME: NameStr<'static> = NameStr::new_const("test");
     }
 
@@ -847,11 +847,11 @@ mod tests {
         use time::Duration;
 
         let mut test_time = time::OffsetDateTime::now_utc();
-        let mut last_id: TNID<TestId> = TNID::new_v0_with_time(test_time);
+        let mut last_id: Tnid<TestId> = Tnid::new_v0_with_time(test_time);
 
         for _ in 1..10_000 {
             test_time += Duration::milliseconds(1);
-            let id: TNID<TestId> = TNID::new_v0_with_time(test_time);
+            let id: Tnid<TestId> = Tnid::new_v0_with_time(test_time);
 
             assert!(last_id.as_u128() < id.as_u128());
             assert!(last_id.as_tnid_string() < id.as_tnid_string());
@@ -862,8 +862,8 @@ mod tests {
 
     #[test]
     fn tnid_variant_returns_v0() {
-        let id: TNID<TestId> = TNID::new_v0();
-        assert_eq!(id.variant(), TNIDVariant::V0);
+        let id: Tnid<TestId> = Tnid::new_v0();
+        assert_eq!(id.variant(), TnidVariant::V0);
     }
 
     #[cfg(feature = "encryption")]
@@ -871,37 +871,37 @@ mod tests {
     fn encryption_bidirectional() {
         let secret = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
 
-        let original: TNID<TestId> = TNID::new_v0();
-        assert_eq!(original.variant(), TNIDVariant::V0);
+        let original: Tnid<TestId> = Tnid::new_v0();
+        assert_eq!(original.variant(), TnidVariant::V0);
 
         let encrypted = original.encrypt_v0_to_v1(secret).unwrap();
-        assert_eq!(encrypted.variant(), TNIDVariant::V1);
+        assert_eq!(encrypted.variant(), TnidVariant::V1);
 
         dbg!(encrypted, original);
 
         let decrypted = encrypted.decrypt_v1_to_v0(secret).unwrap();
-        assert_eq!(decrypted.variant(), TNIDVariant::V0);
+        assert_eq!(decrypted.variant(), TnidVariant::V0);
 
         assert_eq!(decrypted.as_u128(), original.as_u128());
     }
 
     #[test]
     fn parse_tnid_string_roundtrip() {
-        let original: TNID<TestId> = TNID::new_v0();
+        let original: Tnid<TestId> = Tnid::new_v0();
         let tnid_string = original.as_tnid_string();
-        let parsed = TNID::<TestId>::parse_tnid_string(&tnid_string).unwrap();
+        let parsed = Tnid::<TestId>::parse_tnid_string(&tnid_string).unwrap();
         assert_eq!(parsed.as_u128(), original.as_u128());
     }
 
     #[test]
     fn parse_tnid_string_invalid_name() {
-        let result = TNID::<TestId>::parse_tnid_string("wrong.abc123xyz");
+        let result = Tnid::<TestId>::parse_tnid_string("wrong.abc123xyz");
         assert!(result.is_none());
     }
 
     #[test]
     fn parse_tnid_string_no_separator() {
-        let result = TNID::<TestId>::parse_tnid_string("testabc123xyz");
+        let result = Tnid::<TestId>::parse_tnid_string("testabc123xyz");
         assert!(result.is_none());
     }
 }

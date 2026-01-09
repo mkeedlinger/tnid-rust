@@ -34,22 +34,22 @@
 //! # Example
 //!
 //! ```rust
-//! use tnid::{TNID, TNIDName, NameStr, TNIDVariant};
+//! use tnid::{Tnid, TnidName, NameStr, TnidVariant};
 //!
 //! struct User;
-//! impl TNIDName for User {
+//! impl TnidName for User {
 //!     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
 //! }
 //!
 //! let secret = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
 //!
 //! // Create a time-ordered V0 TNID
-//! let original = TNID::<User>::new_v0();
-//! assert_eq!(original.variant(), TNIDVariant::V0);
+//! let original = Tnid::<User>::new_v0();
+//! assert_eq!(original.variant(), TnidVariant::V0);
 //!
 //! // Encrypt to V1 before sending to client
 //! let encrypted = original.encrypt_v0_to_v1(secret).unwrap();
-//! assert_eq!(encrypted.variant(), TNIDVariant::V1);
+//! assert_eq!(encrypted.variant(), TnidVariant::V1);
 //!
 //! // Decrypt on the backend to recover the original
 //! let decrypted = encrypted.decrypt_v1_to_v0(secret).unwrap();
