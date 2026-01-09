@@ -3,6 +3,12 @@
 //! This module provides format-preserving encryption for TNIDs, allowing you to hide
 //! timestamp information in V0 TNIDs by encrypting them to V1 TNIDs.
 //!
+//! # Note
+//!
+//! The encryption functionality is not part of the TNID specification.
+//! Encrypted TNIDs are standard V1 TNIDs
+//! and remain fully compatible with any TNID implementation.
+//!
 //! # Why Encrypt TNIDs?
 //!
 //! V0 TNIDs contain a timestamp (like UUIDv7), which reveals when the ID was created.
@@ -57,6 +63,9 @@ use fpe::ff1::{FF1, FlexibleNumeralString};
 ///
 /// This is a simple wrapper around `[u8; 16]` with helper methods for
 /// constructing keys from various formats.
+///
+/// The key is 128 bits to match the AES-128 cipher used in the FF1
+/// format-preserving encryption scheme.
 ///
 /// # Example
 ///
