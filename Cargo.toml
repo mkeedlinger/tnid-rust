@@ -1,38 +1,6 @@
-[package]
-name = "tnid"
-version = "0.0.6"
-edition = "2024"
-description = "A UUID compatible ID with static type checking"
-license = "MIT"
-documentation = "https://docs.rs/tnid"
-repository = "https://github.com/mkeedlinger/tnid"
-
-[dependencies]
-aes = {version = "0.8.4", optional = true}
-fpe = {version = "0.6.1", optional = true}
-rand = {version = "0.8.5", optional = true}
-time = {version = "0.3.36", optional = true}
-uuid = {version = "1", optional = true}
-
-[dev-dependencies.uuid]
-version = "1"
-features = ["v4"]
-
-[dev-dependencies]
-proptest = "1.9.0"
-
-
-[features]
-default = ["time", "rand"]
-encryption = ["dep:aes", "dep:fpe"]
-time = ["dep:time"]
-rand = ["dep:rand"]
-uuid = ["dep:uuid"]
-
-# docs.rs-specific configuration
-# https://docs.rs/about/metadata
-[package.metadata.docs.rs]
-# Build docs with all features so gated items (like encryption) appear
-all-features = true
-# Enable the `docsrs` cfg so `doc_auto_cfg` activates (see lib.rs)
-rustdoc-args = ["--cfg", "docsrs"]
+[workspace]
+members = [
+    "tnid",
+    "tnid-cli",
+]
+resolver = "2"
