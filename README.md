@@ -5,24 +5,24 @@
 TNIDs are UUIDv8-compatible identifiers that include a human-readable name and can be strictly typed at compile time.
 
 ```rust
-use tnid::{TNID, TNIDName, NameStr};
+use tnid::{Tnid, TnidName, NameStr};
 
 struct User;
-impl TNIDName for User {
+impl TnidName for User {
     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
 }
 
 // Create a time-ordered ID (like UUIDv7)
-let user_id = TNID::<User>::new_time_ordered();
+let user_id = Tnid::<User>::new_time_ordered();
 println!("{}", user_id);  // user.Br2flcNDfF6LYICnT
 
 // Or a high-entropy ID (like UUIDv4)
-let session_id = TNID::<User>::new_high_entropy();
+let session_id = Tnid::<User>::new_high_entropy();
 ```
 
 ## Why TNIDs?
 
-- **Type-safe**: `TNID<User>` and `TNID<Post>` are different types. Accidentally passing a post ID to a user function? Compile error!
+- **Type-safe**: `Tnid<User>` and `Tnid<Post>` are different types. Accidentally passing a post ID to a user function? Compile error!
 - **Named**: IDs include a human-readable name prefix. See `user.Br2flcNDfF6LYICnT` in your logs and instantly know what it is.
 - **UUID-compatible**: TNIDs are valid UUIDv8s that work directly with Postgres UUID columns and UUID-expecting APIs.
 - **Compile-time validated**: Try to create a TNID with name "INVALID"? Your code won't even compile.
@@ -45,18 +45,18 @@ cargo add tnid
 ### Creating TNIDs
 
 ```rust
-use tnid::{TNID, TNIDName, NameStr};
+use tnid::{Tnid, TnidName, NameStr};
 
 struct Post;
-impl TNIDName for Post {
+impl TnidName for Post {
     const ID_NAME: NameStr<'static> = NameStr::new_const("post");
 }
 
 // Time-ordered (v0) - sorts by creation time
-let id = TNID::<Post>::new_v0();
+let id = Tnid::<Post>::new_v0();
 
 // High-entropy (v1) - maximum randomness
-let id = TNID::<Post>::new_v1();
+let id = Tnid::<Post>::new_v1();
 ```
 
 ### String Representations
@@ -71,9 +71,9 @@ let uuid_str = id.to_uuid_string_cased(false);
 // "cab1952a-f09d-86d9-928e-96ea03dc6af3" - works in Postgres, MySQL, etc.
 
 // Time-ordered IDs sort correctly in BOTH representations!
-let id1 = TNID::<Post>::new_v0();
+let id1 = Tnid::<Post>::new_v0();
 std::thread::sleep(std::time::Duration::from_millis(10));
-let id2 = TNID::<Post>::new_v0();
+let id2 = Tnid::<Post>::new_v0();
 assert!(id1.as_tnid_string() < id2.as_tnid_string());  // Sorts correctly!
 assert!(id1.as_u128() < id2.as_u128());                // In all representations!
 ```
@@ -82,33 +82,33 @@ assert!(id1.as_u128() < id2.as_u128());                // In all representations
 
 ```rust
 // Parse from TNID string
-let id = TNID::<Post>::parse_tnid_string("post.Br2flcNDfF6LYICnT").unwrap();
+let id = Tnid::<Post>::parse_tnid_string("post.Br2flcNDfF6LYICnT").unwrap();
 
 // Parse from UUID string
-let id = TNID::<Post>::parse_uuid_string("cab1952a-f09d-86d9-928e-96ea03dc6af3").unwrap();
+let id = Tnid::<Post>::parse_uuid_string("cab1952a-f09d-86d9-928e-96ea03dc6af3").unwrap();
 
 // From raw u128
-let id = TNID::<Post>::from_u128(0xCAB1952A_F09D_86D9_928E_96EA03DC6AF3).unwrap();
+let id = Tnid::<Post>::from_u128(0xCAB1952A_F09D_86D9_928E_96EA03DC6AF3).unwrap();
 ```
 
 ### Type Safety in Action
 
 ```rust
 struct User;
-impl TNIDName for User {
+impl TnidName for User {
     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
 }
 
 struct Post;
-impl TNIDName for Post {
+impl TnidName for Post {
     const ID_NAME: NameStr<'static> = NameStr::new_const("post");
 }
 
-fn delete_user(user_id: TNID<User>) { /* ... */ }
-fn delete_post(post_id: TNID<Post>) { /* ... */ }
+fn delete_user(user_id: Tnid<User>) { /* ... */ }
+fn delete_post(post_id: Tnid<Post>) { /* ... */ }
 
-let user_id = TNID::<User>::new_v0();
-let post_id = TNID::<Post>::new_v0();
+let user_id = Tnid::<User>::new_v0();
+let post_id = Tnid::<Post>::new_v0();
 
 delete_user(user_id);  // Works!
 delete_post(post_id);  // Works!
