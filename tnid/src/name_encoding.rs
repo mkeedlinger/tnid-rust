@@ -68,9 +68,15 @@ pub const fn name_valid_check(name: &str) {
 pub const NAME_MIN_CHARS: usize = 1;
 pub const NAME_MAX_CHARS: usize = 4;
 
+/// Result of validating the name bits in a TNID.
+///
+/// Used by [`validate_name_bits`] to indicate whether the name encoding
+/// in a u128 ID is valid according to TNID rules.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NameBitsValidation {
+    /// The name encoding is valid (1-4 characters, properly null-padded).
     Valid,
+    /// The name encoding is invalid (empty, improperly padded, or invalid encoding).
     Invalid,
 }
 

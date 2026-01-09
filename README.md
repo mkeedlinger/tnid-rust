@@ -63,18 +63,18 @@ let id = Tnid::<Post>::new_v1();
 
 ```rust
 // TNID string format - human-readable, sortable, unambiguous
-let tnid_str = id.as_tnid_string();
+let tnid_str = id.to_tnid_string();
 // "post.Br2flcNDfF6LYICnT" - you can SEE it's a post ID!
 
 // UUID hex format - for databases and APIs that expect UUIDs
-let uuid_str = id.to_uuid_string_cased(false);
+let uuid_str = id.to_uuid_string(false);
 // "cab1952a-f09d-86d9-928e-96ea03dc6af3" - works in Postgres, MySQL, etc.
 
 // Time-ordered IDs sort correctly in BOTH representations!
 let id1 = Tnid::<Post>::new_v0();
 std::thread::sleep(std::time::Duration::from_millis(10));
 let id2 = Tnid::<Post>::new_v0();
-assert!(id1.as_tnid_string() < id2.as_tnid_string());  // Sorts correctly!
+assert!(id1.to_tnid_string() < id2.to_tnid_string());  // Sorts correctly!
 assert!(id1.as_u128() < id2.as_u128());                // In all representations!
 ```
 
