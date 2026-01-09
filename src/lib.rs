@@ -96,7 +96,7 @@
 //! panic are fuzz tested with randomized inputs to verify they don't. Extensive unit tests
 //! verify correctness of encoding, sorting, and round-trip conversions.
 
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::indexing_slicing)]
