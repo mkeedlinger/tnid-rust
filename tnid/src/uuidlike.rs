@@ -22,7 +22,7 @@
 ///
 /// // Convert to different representations
 /// let as_u128 = uuid_like.as_u128();
-/// let as_string = uuid_like.to_uuid_string_cased(false);
+/// let as_string = uuid_like.to_uuid_string(false);
 /// ```
 ///
 /// Inspecting potentially invalid TNIDs:
@@ -49,7 +49,7 @@ pub struct UUIDLike(u128);
 
 impl std::fmt::Debug for UUIDLike {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_uuid_string_cased(false))
+        write!(f, "{}", self.to_uuid_string(false))
     }
 }
 
@@ -99,13 +99,13 @@ impl UUIDLike {
     ///
     /// let uuid_like = UUIDLike::new(0xCAB1952A_F09D_86D9_928E_96EA03DC6AF3);
     ///
-    /// let lowercase = uuid_like.to_uuid_string_cased(false);
+    /// let lowercase = uuid_like.to_uuid_string(false);
     /// assert_eq!(lowercase, "cab1952a-f09d-86d9-928e-96ea03dc6af3");
     ///
-    /// let uppercase = uuid_like.to_uuid_string_cased(true);
+    /// let uppercase = uuid_like.to_uuid_string(true);
     /// assert_eq!(uppercase, "CAB1952A-F09D-86D9-928E-96EA03DC6AF3");
     /// ```
-    pub fn to_uuid_string_cased(&self, uppercase: bool) -> String {
+    pub fn to_uuid_string(&self, uppercase: bool) -> String {
         crate::utils::u128_to_uuid_string(self.0, uppercase)
     }
 
@@ -170,7 +170,7 @@ impl UUIDLike {
         let s4 = u16::from_str_radix(&uuid_string[19..23], 16).ok()?;
         let s5 = u64::from_str_radix(&uuid_string[24..36], 16).ok()?;
 
-        // Combine sections into u128 (reverse of to_uuid_string_cased)
+        // Combine sections into u128 (reverse of to_uuid_string)
         let id = ((s1 as u128) << 96)
             | ((s2 as u128) << 80)
             | ((s3 as u128) << 64)

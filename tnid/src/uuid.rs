@@ -196,7 +196,7 @@ mod tests {
 
         // uuid crate produces lowercase hex by default
         let uuid_str = uuid.to_string();
-        let tnid_uuid_str = tnid.to_uuid_string_cased(false);
+        let tnid_uuid_str = tnid.to_uuid_string(false);
 
         assert_eq!(uuid_str, tnid_uuid_str);
     }

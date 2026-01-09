@@ -25,7 +25,7 @@
 //! println!("{}", id);  // e.g., "user.Br2flcNDfF6LYICnT"
 //!
 //! // Or as a standard UUID for database storage
-//! let uuid_str = id.to_uuid_string_cased(false);
+//! let uuid_str = id.to_uuid_string(false);
 //! // e.g., "cab1952a-f09d-86d9-928e-96ea03dc6af3"
 //! ```
 //!
@@ -67,10 +67,10 @@
 //! let id = Tnid::<User>::new_v1();
 //!
 //! // TNID string (for APIs, logs, user-facing contexts)
-//! let tnid_str = id.as_tnid_string();
+//! let tnid_str = id.to_tnid_string();
 //!
 //! // UUID string (for databases, UUID-based systems)
-//! let uuid_str = id.to_uuid_string_cased(false);
+//! let uuid_str = id.to_uuid_string(false);
 //!
 //! // Parse back
 //! let from_tnid = Tnid::<User>::parse_tnid_string(&tnid_str);
@@ -106,6 +106,7 @@
 use std::marker::PhantomData;
 
 mod data_encoding;
+pub mod dynamic_tnid;
 #[cfg(feature = "encryption")]
 pub mod encryption;
 mod name_encoding;
@@ -117,6 +118,7 @@ mod uuidlike;
 mod v0;
 mod v1;
 
+pub use dynamic_tnid::DynamicTnid;
 pub use name_encoding::NameStr;
 pub use tnid_variant::TnidVariant;
 pub use uuidlike::UUIDLike;
@@ -481,13 +483,13 @@ impl<Name: TnidName> Tnid<Name> {
     /// }
     ///
     /// let id = Tnid::<User>::new_v0();
-    /// let tnid_string = id.as_tnid_string();
+    /// let tnid_string = id.to_tnid_string();
     ///
     /// // Format: <name>.<encoded-data>
     /// // Example: "user.Br2flcNDfF6LYICnT"
     /// assert!(tnid_string.starts_with("user."));
     /// ```
-    pub fn as_tnid_string(&self) -> String {
+    pub fn to_tnid_string(&self) -> String {
         format!(
             "{}.{}",
             self.name(),
@@ -540,19 +542,19 @@ impl<Name: TnidName> Tnid<Name> {
     ///
     /// let id = Tnid::<User>::new_v1();
     ///
-    /// let uuid_lower = id.to_uuid_string_cased(false);
+    /// let uuid_lower = id.to_uuid_string(false);
     /// // "cab1952a-f09d-86d9-928e-96ea03dc6af3"
     ///
-    /// let uuid_upper = id.to_uuid_string_cased(true);
+    /// let uuid_upper = id.to_uuid_string(true);
     /// // "CAB1952A-F09D-86D9-928E-96EA03DC6AF3"
     /// ```
-    pub fn to_uuid_string_cased(&self, uppercase: bool) -> String {
+    pub fn to_uuid_string(&self, uppercase: bool) -> String {
         utils::u128_to_uuid_string(self.id, uppercase)
     }
 
     /// Parses a TNID from UUID hex string format.
     ///
-    /// This is the inverse of [`Self::to_uuid_string_cased`].
+    /// This is the inverse of [`Self::to_uuid_string`].
     ///
     /// The parser accepts both uppercase and lowercase hex digits (A-F or a-f).
     ///
@@ -574,7 +576,7 @@ impl<Name: TnidName> Tnid<Name> {
     ///
     /// // Create a TNID and convert to UUID string
     /// let original = Tnid::<User>::new_v1();
-    /// let uuid_string = original.to_uuid_string_cased(false);
+    /// let uuid_string = original.to_uuid_string(false);
     ///
     /// // Parse it back
     /// let parsed = Tnid::<User>::parse_uuid_string(&uuid_string);
@@ -582,7 +584,7 @@ impl<Name: TnidName> Tnid<Name> {
     /// assert_eq!(parsed.unwrap().as_u128(), original.as_u128());
     ///
     /// // Also accepts uppercase
-    /// let uuid_upper = original.to_uuid_string_cased(true);
+    /// let uuid_upper = original.to_uuid_string(true);
     /// let parsed_upper = Tnid::<User>::parse_uuid_string(&uuid_upper);
     /// assert!(parsed_upper.is_some());
     ///
@@ -597,7 +599,7 @@ impl<Name: TnidName> Tnid<Name> {
 
     /// Parses a TNID from its string representation.
     ///
-    /// This is the inverse of [`Self::as_tnid_string`]. See that method for details
+    /// This is the inverse of [`Self::to_tnid_string`]. See that method for details
     /// on the TNID string format.
     ///
     /// Returns `None` if the string is invalid. Validation includes:
@@ -823,13 +825,13 @@ impl<Name: TnidName> Tnid<Name> {
 
 impl<Name: TnidName> std::fmt::Display for Tnid<Name> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_tnid_string())
+        write!(f, "{}", self.to_tnid_string())
     }
 }
 
 impl<Name: TnidName> std::fmt::Debug for Tnid<Name> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_tnid_string())
+        write!(f, "{}", self.to_tnid_string())
     }
 }
 
@@ -854,7 +856,7 @@ mod tests {
             let id: Tnid<TestId> = Tnid::new_v0_with_time(test_time);
 
             assert!(last_id.as_u128() < id.as_u128());
-            assert!(last_id.as_tnid_string() < id.as_tnid_string());
+            assert!(last_id.to_tnid_string() < id.to_tnid_string());
 
             last_id = id;
         }
@@ -888,7 +890,7 @@ mod tests {
     #[test]
     fn parse_tnid_string_roundtrip() {
         let original: Tnid<TestId> = Tnid::new_v0();
-        let tnid_string = original.as_tnid_string();
+        let tnid_string = original.to_tnid_string();
         let parsed = Tnid::<TestId>::parse_tnid_string(&tnid_string).unwrap();
         assert_eq!(parsed.as_u128(), original.as_u128());
     }

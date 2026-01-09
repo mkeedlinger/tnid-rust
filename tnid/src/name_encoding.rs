@@ -69,6 +69,8 @@ pub const NAME_MIN_CHARS: usize = 1;
 pub const NAME_MAX_CHARS: usize = 4;
 
 pub const CHAR_BIT_LENGTH: u8 = 5;
+pub const CHAR_MASK: u8 = 0x1F;
+pub const NON_NAME_BITS: u8 = u128::BITS as u8 - (CHAR_BIT_LENGTH * NAME_MAX_CHARS as u8);
 
 pub const CHAR_MAPPING: [(u8, u8); 31] = [
     // zero is a null terminator
@@ -265,9 +267,73 @@ pub fn name_mask(name: NameStr) -> u128 {
     let needed_padding_chars = NAME_MAX_CHARS - name.len();
     mask <<= CHAR_BIT_LENGTH * needed_padding_chars as u8;
 
-    mask <<= 108;
+    mask <<= NON_NAME_BITS;
 
     mask
+}
+
+pub fn validate_name_bits(id: u128) -> bool {
+    // Extract the top 20 bits (bits 127-108)
+    let name_bits = (id >> NON_NAME_BITS) as u32;
+
+    let mut found_char = false;
+    let mut found_null = false;
+
+    // Extract 4 characters of 5 bits each
+    for i in (0..NAME_MAX_CHARS).rev() {
+        let shift = i * CHAR_BIT_LENGTH as usize;
+        let encoded_byte = (name_bits >> shift) as u8 & CHAR_MASK;
+
+        // 0 is null terminator
+        if encoded_byte == 0 {
+            found_null = true;
+            continue;
+        }
+
+        // If we found a non-null after a null, that's invalid (no padding in middle)
+        if found_null {
+            return false;
+        }
+
+        found_char = true;
+    }
+
+    // Must have at least 1 character
+    found_char
+}
+
+pub fn extract_name_string(id: u128) -> Option<String> {
+    let name_bits = (id >> NON_NAME_BITS) as u32;
+
+    let expected_string_len = name_bits.trailing_zeros() / 5;
+
+    let mut name_bytes = Vec::with_capacity(expected_string_len as usize);
+
+    // Extract 4 characters of 5 bits each
+    for i in (0..NAME_MAX_CHARS).rev() {
+        let shift = i * CHAR_BIT_LENGTH as usize;
+        let encoded_byte = ((name_bits >> shift) as u8 & CHAR_MASK) as u8;
+
+        // 0 is null terminator - stop decoding
+        if encoded_byte == 0 {
+            break;
+        }
+
+        // Find the corresponding character in CHAR_MAPPING
+        let decoded_char = CHAR_MAPPING
+            .iter()
+            .find(|(encoded, _)| *encoded == encoded_byte)
+            .map(|(_, ascii_char)| *ascii_char)
+            .expect("there must be a mapping"); // todo: make an exhaustive test for this
+
+        name_bytes.push(decoded_char);
+    }
+
+    if name_bytes.is_empty() {
+        return None;
+    }
+
+    Some(String::from_utf8(name_bytes).expect("name bytes must be valid ASCII"))
 }
 
 #[cfg(all(test, not(debug_assertions)))]
