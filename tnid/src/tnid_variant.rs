@@ -45,6 +45,31 @@ impl TnidVariant {
         }
     }
 
+    /// Extracts the TNID variant from a 128-bit ID.
+    ///
+    /// Reads bits 60-61 of the ID to determine the variant.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{Tnid, TnidName, NameStr, TnidVariant};
+    ///
+    /// struct User;
+    /// impl TnidName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// let v0_id = Tnid::<User>::new_v0();
+    /// assert_eq!(TnidVariant::from_id(v0_id.as_u128()), TnidVariant::V0);
+    ///
+    /// let v1_id = Tnid::<User>::new_v1();
+    /// assert_eq!(TnidVariant::from_id(v1_id.as_u128()), TnidVariant::V1);
+    /// ```
+    pub fn from_id(id: u128) -> TnidVariant {
+        let variant_bits = (id >> 60) as u8;
+        Self::from_u8(variant_bits)
+    }
+
     /// Returns the u8 representation of this variant.
     ///
     /// # Examples

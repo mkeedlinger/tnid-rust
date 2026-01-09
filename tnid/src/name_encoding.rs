@@ -68,6 +68,12 @@ pub const fn name_valid_check(name: &str) {
 pub const NAME_MIN_CHARS: usize = 1;
 pub const NAME_MAX_CHARS: usize = 4;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NameBitsValidation {
+    Valid,
+    Invalid,
+}
+
 pub const CHAR_BIT_LENGTH: u8 = 5;
 pub const CHAR_MASK: u8 = 0x1F;
 pub const NON_NAME_BITS: u8 = u128::BITS as u8 - (CHAR_BIT_LENGTH * NAME_MAX_CHARS as u8);
@@ -272,7 +278,7 @@ pub fn name_mask(name: NameStr) -> u128 {
     mask
 }
 
-pub fn validate_name_bits(id: u128) -> bool {
+pub fn validate_name_bits(id: u128) -> NameBitsValidation {
     // Extract the top 20 bits (bits 127-108)
     let name_bits = (id >> NON_NAME_BITS) as u32;
 
@@ -292,14 +298,27 @@ pub fn validate_name_bits(id: u128) -> bool {
 
         // If we found a non-null after a null, that's invalid (no padding in middle)
         if found_null {
-            return false;
+            return NameBitsValidation::Invalid;
         }
 
         found_char = true;
     }
 
     // Must have at least 1 character
-    found_char
+    if found_char {
+        NameBitsValidation::Valid
+    } else {
+        NameBitsValidation::Invalid
+    }
+}
+
+pub fn name_bits_to_hex(id: u128) -> String {
+    let name_bits = (id >> NON_NAME_BITS) as u32;
+    let hex = format!("{:05x}", name_bits);
+
+    debug_assert_eq!(hex.len(), 5);
+
+    hex
 }
 
 pub fn extract_name_string(id: u128) -> Option<String> {

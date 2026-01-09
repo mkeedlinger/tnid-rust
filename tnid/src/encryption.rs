@@ -59,6 +59,8 @@
 use aes::Aes128;
 use fpe::ff1::{FF1, FlexibleNumeralString};
 
+use crate::{utils, TnidVariant};
+
 /// A 128-bit (16 byte) encryption key for TNID encryption.
 ///
 /// This is a simple wrapper around `[u8; 16]` with helper methods for
@@ -255,6 +257,66 @@ pub(crate) fn decrypt(id_secret_data: u128, key: &EncryptionKey) -> u128 {
         .expect("string is in required radix");
 
     hex_digits_to_u128(decrypted.into())
+}
+
+/// Encrypts a V0 TNID to V1, hiding timestamp information.
+///
+/// Returns `None` if the ID is not V0 or is V2/V3 (unsupported variants).
+/// Returns the original ID unchanged if it's already V1.
+pub(crate) fn encrypt_id_v0_to_v1(id: u128, key: &EncryptionKey) -> Option<u128> {
+    match TnidVariant::from_id(id) {
+        TnidVariant::V0 => {}
+        TnidVariant::V1 => return Some(id),
+        TnidVariant::V2 => return None,
+        TnidVariant::V3 => return None,
+    }
+
+    // Extract only the secret data bits (100 bits, excludes TNID variant)
+    let secret_data = extract_secret_data_bits(id);
+
+    // Encrypt the secret data
+    let encrypted_data = encrypt(secret_data, key);
+
+    // Expand back to proper bit positions
+    let expanded = expand_secret_data_bits(encrypted_data);
+
+    // Preserve name and UUID metadata, replace data bits with encrypted version
+    let id = (id & !COMPLETE_SECRET_DATA_MASK) | expanded;
+
+    // Change variant from V0 to V1
+    let id = utils::change_variant(id, TnidVariant::V1);
+
+    Some(id)
+}
+
+/// Decrypts a V1 TNID back to V0, recovering timestamp information.
+///
+/// Returns `None` if the ID is not V1 or is V2/V3 (unsupported variants).
+/// Returns the original ID unchanged if it's already V0.
+pub(crate) fn decrypt_id_v1_to_v0(id: u128, key: &EncryptionKey) -> Option<u128> {
+    match TnidVariant::from_id(id) {
+        TnidVariant::V0 => return Some(id),
+        TnidVariant::V1 => {}
+        TnidVariant::V2 => return None,
+        TnidVariant::V3 => return None,
+    }
+
+    // Extract only the secret data bits (100 bits, excludes TNID variant)
+    let encrypted_data = extract_secret_data_bits(id);
+
+    // Decrypt the secret data
+    let decrypted_data = decrypt(encrypted_data, key);
+
+    // Expand back to proper bit positions
+    let expanded = expand_secret_data_bits(decrypted_data);
+
+    // Preserve name and UUID metadata, replace data bits with decrypted version
+    let id = (id & !COMPLETE_SECRET_DATA_MASK) | expanded;
+
+    // Change variant from V1 to V0
+    let id = utils::change_variant(id, TnidVariant::V0);
+
+    Some(id)
 }
 
 #[cfg(all(test, not(debug_assertions)))]

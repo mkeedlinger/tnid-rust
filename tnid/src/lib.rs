@@ -119,7 +119,7 @@ mod v0;
 mod v1;
 
 pub use dynamic_tnid::DynamicTnid;
-pub use name_encoding::NameStr;
+pub use name_encoding::{NameBitsValidation, NameStr};
 pub use tnid_variant::TnidVariant;
 pub use uuidlike::UUIDLike;
 
@@ -226,11 +226,7 @@ impl<Name: TnidName> Tnid<Name> {
     /// assert_eq!(id.name_hex(), "cab19");
     /// ```
     pub fn name_hex(&self) -> String {
-        let hex = format!("{:05x}", self.id >> 108);
-
-        debug_assert_eq!(hex.len(), 5);
-
-        hex
+        name_encoding::name_bits_to_hex(self.id)
     }
 
     /// Returns the raw 128-bit UUIDv8-compatible representation of this TNID.
@@ -516,9 +512,7 @@ impl<Name: TnidName> Tnid<Name> {
     /// assert_eq!(id_v1.variant(), TnidVariant::V1);
     /// ```
     pub fn variant(&self) -> TnidVariant {
-        let variant_bits = (self.id >> 60) as u8;
-
-        TnidVariant::from_u8(variant_bits)
+        TnidVariant::from_id(self.id)
     }
 
     /// Converts the TNID to UUID hex string format.
@@ -730,27 +724,7 @@ impl<Name: TnidName> Tnid<Name> {
     /// ```
     #[cfg(feature = "encryption")]
     pub fn encrypt_v0_to_v1(&self, key: impl Into<encryption::EncryptionKey>) -> Result<Self, ()> {
-        match self.variant() {
-            TnidVariant::V0 => {}
-            TnidVariant::V1 => return Ok(*self),
-            TnidVariant::V2 => return Err(()),
-            TnidVariant::V3 => return Err(()),
-        }
-
-        // Extract only the secret data bits (100 bits, excludes TNID variant)
-        let secret_data = encryption::extract_secret_data_bits(self.id);
-
-        // Encrypt the secret data
-        let encrypted_data = encryption::encrypt(secret_data, &key.into());
-
-        // Expand back to proper bit positions
-        let expanded = encryption::expand_secret_data_bits(encrypted_data);
-
-        // Preserve name and UUID metadata, replace data bits with encrypted version
-        let id = (self.id & !encryption::COMPLETE_SECRET_DATA_MASK) | expanded;
-
-        // Change variant from V0 to V1
-        let id = utils::change_variant(id, TnidVariant::V1);
+        let id = encryption::encrypt_id_v0_to_v1(self.id, &key.into()).ok_or(())?;
 
         Ok(Self {
             id_name: PhantomData,
@@ -794,27 +768,7 @@ impl<Name: TnidName> Tnid<Name> {
     /// ```
     #[cfg(feature = "encryption")]
     pub fn decrypt_v1_to_v0(&self, key: impl Into<encryption::EncryptionKey>) -> Result<Self, ()> {
-        match self.variant() {
-            TnidVariant::V0 => return Ok(*self),
-            TnidVariant::V1 => {}
-            TnidVariant::V2 => return Err(()),
-            TnidVariant::V3 => return Err(()),
-        }
-
-        // Extract only the secret data bits (100 bits, excludes TNID variant)
-        let encrypted_data = encryption::extract_secret_data_bits(self.id);
-
-        // Decrypt the secret data
-        let decrypted_data = encryption::decrypt(encrypted_data, &key.into());
-
-        // Expand back to proper bit positions
-        let expanded = encryption::expand_secret_data_bits(decrypted_data);
-
-        // Preserve name and UUID metadata, replace data bits with decrypted version
-        let id = (self.id & !encryption::COMPLETE_SECRET_DATA_MASK) | expanded;
-
-        // Change variant from V1 to V0
-        let id = utils::change_variant(id, TnidVariant::V0);
+        let id = encryption::decrypt_id_v1_to_v0(self.id, &key.into()).ok_or(())?;
 
         Ok(Self {
             id_name: PhantomData,
