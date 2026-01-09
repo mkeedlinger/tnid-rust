@@ -82,6 +82,42 @@ pub const CHAR_MAPPING: [(u8, u8); ENCODING_CHAR_NUM as usize] = [
     (63, b'z'),
 ];
 
+/// Error when decoding a TNID data string.
+///
+/// Note: This error type is generally not used directly, but is exposed through
+/// [`ParseTnidError::InvalidDataEncoding`](crate::ParseTnidError::InvalidDataEncoding).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DataEncodingError {
+    /// The data string has wrong length.
+    /// Contains the actual length (expected is 17).
+    WrongLength(usize),
+    /// An invalid character was found in the data string.
+    /// Contains the invalid byte.
+    InvalidChar(u8),
+}
+
+impl std::fmt::Display for DataEncodingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::WrongLength(len) => {
+                write!(
+                    f,
+                    "data string length {len} is invalid; expected {DATA_CHAR_ENCODING_LEN} characters"
+                )
+            }
+            Self::InvalidChar(byte) => {
+                write!(
+                    f,
+                    "invalid character '{}' (0x{byte:02x}) in data string",
+                    char::from(*byte)
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for DataEncodingError {}
+
 pub fn id_data_to_string(id: u128) -> String {
     let mut s = String::with_capacity(17);
 
@@ -105,10 +141,10 @@ pub fn id_data_to_string(id: u128) -> String {
     s
 }
 
-pub fn string_to_id_data(s: &str) -> Option<u128> {
+pub(crate) fn string_to_id_data(s: &str) -> Result<u128, DataEncodingError> {
     // Validate length
     if s.len() != DATA_CHAR_ENCODING_LEN as usize {
-        return None;
+        return Err(DataEncodingError::WrongLength(s.len()));
     }
 
     let mut result = 0u128;
@@ -118,12 +154,13 @@ pub fn string_to_id_data(s: &str) -> Option<u128> {
         let value = CHAR_MAPPING
             .iter()
             .find(|(_, char)| *char == c)
-            .map(|(val, _)| val)?;
+            .map(|(val, _)| val)
+            .ok_or(DataEncodingError::InvalidChar(c))?;
 
         result = (result << CHAR_BIT_LENGTH) | (*value as u128);
     }
 
-    Some(result)
+    Ok(result)
 }
 
 const RIGHT_DATA_SECTION_MASK: u128 = 0x00000000_0000_0000_3fff_ffffffffffff;

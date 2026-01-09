@@ -23,7 +23,7 @@
 //!
 //! // Create a TNID with a runtime-determined name
 //! let name = NameStr::new("user").unwrap();
-//! let id = DynamicTnid::new_v0(name).unwrap();
+//! let id = DynamicTnid::new_v0(name);
 //!
 //! // Parse from string
 //! let parsed = DynamicTnid::parse_tnid_string("user.Br2flcNDfF6LYICnT").unwrap();
@@ -33,7 +33,7 @@
 //! ```
 
 #[cfg(feature = "encryption")]
-use crate::EncryptionKey;
+use crate::encryption::EncryptionKey;
 use crate::{data_encoding, name_encoding, utils, v0, v1, NameStr, Tnid, TnidName, TnidVariant, UUIDLike};
 #[cfg(feature = "time")]
 use time::OffsetDateTime;
@@ -58,7 +58,7 @@ use time::OffsetDateTime;
 ///
 /// // Create a new TNID
 /// let name = NameStr::new("user").unwrap();
-/// let id = DynamicTnid::new_v0(name).unwrap();
+/// let id = DynamicTnid::new_v0(name);
 ///
 /// // Parse from string
 /// let parsed = DynamicTnid::parse_tnid_string("user.Br2flcNDfF6LYICnT").unwrap();
@@ -85,10 +85,10 @@ impl DynamicTnid {
     /// use tnid::{DynamicTnid, NameStr};
     ///
     /// let name = NameStr::new("user").unwrap();
-    /// let id = DynamicTnid::new_v0(name).unwrap();
+    /// let id = DynamicTnid::new_v0(name);
     /// ```
     #[cfg(all(feature = "time", feature = "rand"))]
-    pub fn new_v0(name: NameStr) -> Option<Self> {
+    pub fn new_v0(name: NameStr) -> Self {
         Self::new_v0_with_time(name, time::OffsetDateTime::now_utc())
     }
 
@@ -99,7 +99,7 @@ impl DynamicTnid {
     ///
     /// Use this when you need time-based sorting, similar to choosing UUIDv7 over UUIDv4.
     #[cfg(all(feature = "time", feature = "rand"))]
-    pub fn new_time_ordered(name: NameStr) -> Option<Self> {
+    pub fn new_time_ordered(name: NameStr) -> Self {
         Self::new_v0(name)
     }
 
@@ -117,13 +117,13 @@ impl DynamicTnid {
     ///
     /// let name = NameStr::new("user").unwrap();
     /// let now = OffsetDateTime::now_utc();
-    /// let id = DynamicTnid::new_v0_with_time(name, now).unwrap();
+    /// let id = DynamicTnid::new_v0_with_time(name, now);
     /// ```
     #[cfg(all(feature = "time", feature = "rand"))]
-    pub fn new_v0_with_time(name: NameStr, time: OffsetDateTime) -> Option<Self> {
+    pub fn new_v0_with_time(name: NameStr, time: OffsetDateTime) -> Self {
         let epoch_millis = (time.unix_timestamp_nanos() / 1000 / 1000) as u64;
         let random_bits: u64 = rand::random();
-        Some(Self(v0::make_from_parts(name, epoch_millis, random_bits)))
+        Self(v0::make_from_parts(name, epoch_millis, random_bits))
     }
 
     /// Generates a new v0 TNID with explicit timestamp and random components.
@@ -141,10 +141,10 @@ impl DynamicTnid {
     /// let timestamp_ms = 1750118400000;
     /// let random_bits = 42;
     ///
-    /// let id = DynamicTnid::new_v0_with_parts(name, timestamp_ms, random_bits).unwrap();
+    /// let id = DynamicTnid::new_v0_with_parts(name, timestamp_ms, random_bits);
     /// ```
-    pub fn new_v0_with_parts(name: NameStr, epoch_millis: u64, random: u64) -> Option<Self> {
-        Some(Self(v0::make_from_parts(name, epoch_millis, random)))
+    pub fn new_v0_with_parts(name: NameStr, epoch_millis: u64, random: u64) -> Self {
+        Self(v0::make_from_parts(name, epoch_millis, random))
     }
 
     /// Generates a new v1 TNID with the given name.
@@ -161,10 +161,10 @@ impl DynamicTnid {
     /// use tnid::{DynamicTnid, NameStr};
     ///
     /// let name = NameStr::new("user").unwrap();
-    /// let id = DynamicTnid::new_v1(name).unwrap();
+    /// let id = DynamicTnid::new_v1(name);
     /// ```
     #[cfg(feature = "rand")]
-    pub fn new_v1(name: NameStr) -> Option<Self> {
+    pub fn new_v1(name: NameStr) -> Self {
         Self::new_v1_with_random(name, rand::random())
     }
 
@@ -179,10 +179,10 @@ impl DynamicTnid {
     /// use tnid::{DynamicTnid, NameStr};
     ///
     /// let name = NameStr::new("user").unwrap();
-    /// let id = DynamicTnid::new_high_entropy(name).unwrap();
+    /// let id = DynamicTnid::new_high_entropy(name);
     /// ```
     #[cfg(feature = "rand")]
-    pub fn new_high_entropy(name: NameStr) -> Option<Self> {
+    pub fn new_high_entropy(name: NameStr) -> Self {
         Self::new_v1(name)
     }
 
@@ -199,10 +199,10 @@ impl DynamicTnid {
     /// let name = NameStr::new("user").unwrap();
     /// let random_bits = 0x0123456789ABCDEF0123456789ABCDEF;
     ///
-    /// let id = DynamicTnid::new_v1_with_random(name, random_bits).unwrap();
+    /// let id = DynamicTnid::new_v1_with_random(name, random_bits);
     /// ```
-    pub fn new_v1_with_random(name: NameStr, random_bits: u128) -> Option<Self> {
-        Some(Self(v1::make_from_parts(name, random_bits)))
+    pub fn new_v1_with_random(name: NameStr, random_bits: u128) -> Self {
+        Self(v1::make_from_parts(name, random_bits))
     }
 
     /// Creates a TNID from a raw 128-bit value.
@@ -229,18 +229,18 @@ impl DynamicTnid {
     /// let id = DynamicTnid::from_u128(0xCAB1952A_F09D_86D9_928E_96EA03DC6AF3).unwrap();
     /// assert_eq!(id.name(), "test");
     /// ```
-    pub fn from_u128(id: u128) -> Option<Self> {
+    pub fn from_u128(id: u128) -> Result<Self, crate::ParseTnidError> {
         // Validate UUIDv8 version and variant bits
         if (id & utils::UUID_V8_MASK) != utils::UUID_V8_MASK {
-            return None;
+            return Err(crate::ParseTnidError::InvalidUuidBits);
         }
 
         // Validate name encoding
         if name_encoding::validate_name_bits(id) != name_encoding::NameBitsValidation::Valid {
-            return None;
+            return Err(crate::ParseTnidError::InvalidNameBits);
         }
 
-        Some(Self(id))
+        Ok(Self(id))
     }
 
     /// Parses a TNID from its string representation.
@@ -263,17 +263,26 @@ impl DynamicTnid {
     /// assert_eq!(parsed.name(), "user");
     ///
     /// // Failed parsing - invalid format
-    /// assert!(DynamicTnid::parse_tnid_string("not-a-tnid").is_none());
+    /// assert!(DynamicTnid::parse_tnid_string("not-a-tnid").is_err());
     /// ```
-    pub fn parse_tnid_string(s: &str) -> Option<Self> {
+    pub fn parse_tnid_string(s: &str) -> Result<Self, crate::ParseTnidError> {
+        // Quick length check - valid TNIDs are 19-22 chars (name 1-4 + '.' + data 17)
+        const MIN_LEN: usize = name_encoding::NAME_MIN_CHARS + 1 + data_encoding::DATA_CHAR_ENCODING_LEN as usize;
+        const MAX_LEN: usize = name_encoding::NAME_MAX_CHARS + 1 + data_encoding::DATA_CHAR_ENCODING_LEN as usize;
+
+        if s.len() < MIN_LEN || s.len() > MAX_LEN {
+            return Err(crate::ParseTnidError::InvalidLength(s.len()));
+        }
+
         // Split on dot separator
-        let (name_str, data_str) = s.split_once('.')?;
+        let (name_str, data_str) = s.split_once('.').ok_or(crate::ParseTnidError::MissingSeparator)?;
 
         // Validate name is valid
-        let name = NameStr::new(name_str)?;
+        let name = NameStr::new(name_str).map_err(crate::ParseTnidError::InvalidName)?;
 
         // Decode data string to compact 102 bits
-        let compact_data = data_encoding::string_to_id_data(data_str)?;
+        let compact_data = data_encoding::string_to_id_data(data_str)
+            .map_err(crate::ParseTnidError::InvalidDataEncoding)?;
 
         // Expand to proper bit positions
         let data_bits = data_encoding::expand_data_bits(compact_data);
@@ -284,7 +293,7 @@ impl DynamicTnid {
         // Combine: name + UUID metadata + data
         let id = name_bits | utils::UUID_V8_MASK | data_bits;
 
-        Some(Self(id))
+        Ok(Self(id))
     }
 
     /// Parses a TNID from UUID hex string format.
@@ -304,7 +313,7 @@ impl DynamicTnid {
     ///
     /// // Create a TNID and convert to UUID string
     /// let name = NameStr::new("user").unwrap();
-    /// let original = DynamicTnid::new_v1(name).unwrap();
+    /// let original = DynamicTnid::new_v1(name);
     /// let uuid_string = original.to_uuid_string(false);
     ///
     /// // Parse it back
@@ -316,10 +325,12 @@ impl DynamicTnid {
     /// let parsed_upper = DynamicTnid::parse_uuid_string(&uuid_upper).unwrap();
     ///
     /// // Invalid: not a valid UUID format
-    /// assert!(DynamicTnid::parse_uuid_string("not-a-uuid").is_none());
+    /// assert!(DynamicTnid::parse_uuid_string("not-a-uuid").is_err());
     /// ```
-    pub fn parse_uuid_string(s: &str) -> Option<Self> {
-        let id = crate::UUIDLike::parse_uuid_string(s)?.as_u128();
+    pub fn parse_uuid_string(s: &str) -> Result<Self, crate::ParseTnidError> {
+        let id = crate::UUIDLike::parse_uuid_string(s)
+            .map_err(crate::ParseTnidError::InvalidUuidFormat)?
+            .as_u128();
 
         Self::from_u128(id)
     }
@@ -332,7 +343,7 @@ impl DynamicTnid {
     /// use tnid::{DynamicTnid, NameStr};
     ///
     /// let name = NameStr::new("user").unwrap();
-    /// let id = DynamicTnid::new_v0(name).unwrap();
+    /// let id = DynamicTnid::new_v0(name);
     /// assert_eq!(id.name(), "user");
     /// ```
     pub fn name(&self) -> String {
@@ -349,7 +360,7 @@ impl DynamicTnid {
     /// use tnid::{DynamicTnid, NameStr};
     ///
     /// let name = NameStr::new("test").unwrap();
-    /// let id = DynamicTnid::new_v1(name).unwrap();
+    /// let id = DynamicTnid::new_v1(name);
     /// assert_eq!(id.name_hex(), "cab19");
     /// ```
     pub fn name_hex(&self) -> String {
@@ -367,7 +378,7 @@ impl DynamicTnid {
     /// use tnid::{DynamicTnid, NameStr};
     ///
     /// let name = NameStr::new("user").unwrap();
-    /// let id = DynamicTnid::new_v0(name).unwrap();
+    /// let id = DynamicTnid::new_v0(name);
     /// let as_u128 = id.as_u128();
     ///
     /// // Convert to big-endian bytes for storage/transmission
@@ -384,10 +395,10 @@ impl DynamicTnid {
     /// ```rust
     /// use tnid::{DynamicTnid, NameStr, TnidVariant};
     ///
-    /// let id_v0 = DynamicTnid::new_v0(NameStr::new("user").unwrap()).unwrap();
+    /// let id_v0 = DynamicTnid::new_v0(NameStr::new("user").unwrap());
     /// assert_eq!(id_v0.variant(), TnidVariant::V0);
     ///
-    /// let id_v1 = DynamicTnid::new_v1(NameStr::new("user").unwrap()).unwrap();
+    /// let id_v1 = DynamicTnid::new_v1(NameStr::new("user").unwrap());
     /// assert_eq!(id_v1.variant(), TnidVariant::V1);
     /// ```
     pub fn variant(&self) -> TnidVariant {
@@ -405,7 +416,7 @@ impl DynamicTnid {
     /// use tnid::{DynamicTnid, NameStr};
     ///
     /// let name = NameStr::new("user").unwrap();
-    /// let id = DynamicTnid::new_v0(name).unwrap();
+    /// let id = DynamicTnid::new_v0(name);
     /// let tnid_string = id.to_tnid_string();
     ///
     /// // Format: <name>.<encoded-data>
@@ -427,7 +438,7 @@ impl DynamicTnid {
     /// use tnid::{DynamicTnid, NameStr};
     ///
     /// let name = NameStr::new("user").unwrap();
-    /// let id = DynamicTnid::new_v1(name).unwrap();
+    /// let id = DynamicTnid::new_v1(name);
     ///
     /// let uuid_lower = id.to_uuid_string(false);
     /// // "cab1952a-f09d-86d9-928e-96ea03dc6af3"
@@ -450,7 +461,7 @@ impl DynamicTnid {
     /// use tnid::{DynamicTnid, NameStr};
     ///
     /// let name = NameStr::new("user").unwrap();
-    /// let id = DynamicTnid::new_v1(name).unwrap();
+    /// let id = DynamicTnid::new_v1(name);
     /// let bytes = id.to_bytes();
     /// assert_eq!(bytes.len(), 16);
     /// ```
@@ -472,26 +483,26 @@ impl DynamicTnid {
     /// use tnid::{DynamicTnid, NameStr};
     ///
     /// let name = NameStr::new("user").unwrap();
-    /// let original = DynamicTnid::new_v1(name).unwrap();
+    /// let original = DynamicTnid::new_v1(name);
     /// let bytes = original.to_bytes();
     ///
     /// let parsed = DynamicTnid::from_bytes(bytes).unwrap();
     /// assert_eq!(parsed.as_u128(), original.as_u128());
     /// ```
-    pub fn from_bytes(bytes: [u8; 16]) -> Option<Self> {
+    pub fn from_bytes(bytes: [u8; 16]) -> Result<Self, crate::ParseTnidError> {
         Self::from_u128(u128::from_be_bytes(bytes))
     }
 
     #[cfg(feature = "encryption")]
-    pub fn encrypt_v0_to_v1(&self, key: impl Into<EncryptionKey>) -> Option<Self> {
+    pub fn encrypt_v0_to_v1(&self, key: impl Into<EncryptionKey>) -> Result<Self, crate::EncryptionError> {
         let id = crate::encryption::encrypt_id_v0_to_v1(self.0, &key.into())?;
-        Some(Self(id))
+        Ok(Self(id))
     }
 
     #[cfg(feature = "encryption")]
-    pub fn decrypt_v1_to_v0(&self, key: impl Into<EncryptionKey>) -> Option<Self> {
+    pub fn decrypt_v1_to_v0(&self, key: impl Into<EncryptionKey>) -> Result<Self, crate::EncryptionError> {
         let id = crate::encryption::decrypt_id_v1_to_v0(self.0, &key.into())?;
-        Some(Self(id))
+        Ok(Self(id))
     }
 }
 
@@ -502,18 +513,18 @@ impl<Name: TnidName> From<Tnid<Name>> for DynamicTnid {
 }
 
 impl TryFrom<UUIDLike> for DynamicTnid {
-    type Error = ();
+    type Error = crate::ParseTnidError;
 
     fn try_from(uuid: UUIDLike) -> Result<Self, Self::Error> {
-        Self::from_u128(uuid.as_u128()).ok_or(())
+        Self::from_u128(uuid.as_u128())
     }
 }
 
 impl<Name: TnidName> TryFrom<DynamicTnid> for Tnid<Name> {
-    type Error = ();
+    type Error = crate::ParseTnidError;
 
     fn try_from(dynamic: DynamicTnid) -> Result<Self, Self::Error> {
-        Tnid::<Name>::from_u128(dynamic.0).ok_or(())
+        Tnid::<Name>::from_u128(dynamic.0)
     }
 }
 

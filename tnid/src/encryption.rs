@@ -61,6 +61,62 @@ use fpe::ff1::{FF1, FlexibleNumeralString};
 
 use crate::{utils, TnidVariant};
 
+/// Error when creating an [`EncryptionKey`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EncryptionKeyError {
+    /// The hex string is not 32 characters long.
+    /// Contains the actual length.
+    WrongHexLength(usize),
+    /// An invalid hex character was found.
+    /// Contains the position and the invalid byte.
+    InvalidHexChar { position: usize, byte: u8 },
+    /// The byte slice is not 16 bytes long.
+    /// Contains the actual length.
+    WrongByteLength(usize),
+}
+
+impl std::fmt::Display for EncryptionKeyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::WrongHexLength(len) => {
+                write!(f, "encryption key hex string must be 32 characters, got {len}")
+            }
+            Self::InvalidHexChar { position, byte } => {
+                write!(
+                    f,
+                    "invalid hex character '{}' (0x{byte:02x}) at position {position}",
+                    char::from(*byte)
+                )
+            }
+            Self::WrongByteLength(len) => {
+                write!(f, "encryption key slice must be 16 bytes, got {len}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for EncryptionKeyError {}
+
+/// Error when encrypting or decrypting a TNID.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EncryptionError {
+    /// The TNID variant is not supported for encryption/decryption.
+    /// Contains the unsupported variant.
+    UnsupportedVariant(TnidVariant),
+}
+
+impl std::fmt::Display for EncryptionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnsupportedVariant(variant) => {
+                write!(f, "TNID variant {variant:?} is not supported for encryption/decryption")
+            }
+        }
+    }
+}
+
+impl std::error::Error for EncryptionError {}
+
 /// A 128-bit (16 byte) encryption key for TNID encryption.
 ///
 /// This is a simple wrapper around `[u8; 16]` with helper methods for
@@ -95,7 +151,7 @@ impl EncryptionKey {
 
     /// Creates an encryption key from a 32-character hex string.
     ///
-    /// Returns `None` if the string is not exactly 32 hex characters.
+    /// Returns `Err` if the string is not exactly 32 hex characters.
     ///
     /// # Example
     ///
@@ -110,26 +166,35 @@ impl EncryptionKey {
     /// let key = EncryptionKey::from_hex("0102030405060708090A0B0C0D0E0F10").unwrap();
     ///
     /// // Invalid length
-    /// assert!(EncryptionKey::from_hex("0102").is_none());
+    /// assert!(EncryptionKey::from_hex("0102").is_err());
     /// ```
-    pub fn from_hex(s: &str) -> Option<Self> {
+    pub fn from_hex(s: &str) -> Result<Self, EncryptionKeyError> {
         if s.len() != 32 {
-            return None;
+            return Err(EncryptionKeyError::WrongHexLength(s.len()));
         }
 
+        let bytes_slice = s.as_bytes();
         let mut bytes = [0u8; 16];
-        for (i, chunk) in s.as_bytes().chunks(2).enumerate() {
-            let high = hex_char_to_nibble(*chunk.first()?)?;
-            let low = hex_char_to_nibble(*chunk.get(1)?)?;
-            *bytes.get_mut(i)? = (high << 4) | low;
+        for (i, chunk) in bytes_slice.chunks(2).enumerate() {
+            let pos = i * 2;
+            let high_byte = *chunk.first().ok_or(EncryptionKeyError::WrongHexLength(s.len()))?;
+            let low_byte = *chunk.get(1).ok_or(EncryptionKeyError::WrongHexLength(s.len()))?;
+
+            let high = hex_char_to_nibble(high_byte)
+                .ok_or(EncryptionKeyError::InvalidHexChar { position: pos, byte: high_byte })?;
+            let low = hex_char_to_nibble(low_byte)
+                .ok_or(EncryptionKeyError::InvalidHexChar { position: pos + 1, byte: low_byte })?;
+
+            let byte_slot = bytes.get_mut(i).ok_or(EncryptionKeyError::WrongHexLength(s.len()))?;
+            *byte_slot = (high << 4) | low;
         }
 
-        Some(Self(bytes))
+        Ok(Self(bytes))
     }
 
     /// Creates an encryption key from a byte slice.
     ///
-    /// Returns `None` if the slice is not exactly 16 bytes.
+    /// Returns `Err` if the slice is not exactly 16 bytes.
     ///
     /// # Example
     ///
@@ -140,11 +205,12 @@ impl EncryptionKey {
     /// let key = EncryptionKey::from_slice(bytes).unwrap();
     ///
     /// // Wrong length
-    /// assert!(EncryptionKey::from_slice(&[1, 2, 3]).is_none());
+    /// assert!(EncryptionKey::from_slice(&[1, 2, 3]).is_err());
     /// ```
-    pub fn from_slice(s: &[u8]) -> Option<Self> {
-        let bytes: [u8; 16] = s.try_into().ok()?;
-        Some(Self(bytes))
+    pub fn from_slice(s: &[u8]) -> Result<Self, EncryptionKeyError> {
+        let bytes: [u8; 16] = s.try_into()
+            .map_err(|_| EncryptionKeyError::WrongByteLength(s.len()))?;
+        Ok(Self(bytes))
     }
 
     /// Returns the key as a byte array reference.
@@ -261,14 +327,15 @@ pub(crate) fn decrypt(id_secret_data: u128, key: &EncryptionKey) -> u128 {
 
 /// Encrypts a V0 TNID to V1, hiding timestamp information.
 ///
-/// Returns `None` if the ID is not V0 or is V2/V3 (unsupported variants).
+/// Returns `Err` if the ID is V2/V3 (unsupported variants).
 /// Returns the original ID unchanged if it's already V1.
-pub(crate) fn encrypt_id_v0_to_v1(id: u128, key: &EncryptionKey) -> Option<u128> {
+pub(crate) fn encrypt_id_v0_to_v1(id: u128, key: &EncryptionKey) -> Result<u128, EncryptionError> {
     match TnidVariant::from_id(id) {
         TnidVariant::V0 => {}
-        TnidVariant::V1 => return Some(id),
-        TnidVariant::V2 => return None,
-        TnidVariant::V3 => return None,
+        TnidVariant::V1 => return Ok(id),
+        variant @ (TnidVariant::V2 | TnidVariant::V3) => {
+            return Err(EncryptionError::UnsupportedVariant(variant));
+        }
     }
 
     // Extract only the secret data bits (100 bits, excludes TNID variant)
@@ -286,19 +353,20 @@ pub(crate) fn encrypt_id_v0_to_v1(id: u128, key: &EncryptionKey) -> Option<u128>
     // Change variant from V0 to V1
     let id = utils::change_variant(id, TnidVariant::V1);
 
-    Some(id)
+    Ok(id)
 }
 
 /// Decrypts a V1 TNID back to V0, recovering timestamp information.
 ///
-/// Returns `None` if the ID is not V1 or is V2/V3 (unsupported variants).
+/// Returns `Err` if the ID is V2/V3 (unsupported variants).
 /// Returns the original ID unchanged if it's already V0.
-pub(crate) fn decrypt_id_v1_to_v0(id: u128, key: &EncryptionKey) -> Option<u128> {
+pub(crate) fn decrypt_id_v1_to_v0(id: u128, key: &EncryptionKey) -> Result<u128, EncryptionError> {
     match TnidVariant::from_id(id) {
-        TnidVariant::V0 => return Some(id),
+        TnidVariant::V0 => return Ok(id),
         TnidVariant::V1 => {}
-        TnidVariant::V2 => return None,
-        TnidVariant::V3 => return None,
+        variant @ (TnidVariant::V2 | TnidVariant::V3) => {
+            return Err(EncryptionError::UnsupportedVariant(variant));
+        }
     }
 
     // Extract only the secret data bits (100 bits, excludes TNID variant)
@@ -316,7 +384,7 @@ pub(crate) fn decrypt_id_v1_to_v0(id: u128, key: &EncryptionKey) -> Option<u128>
     // Change variant from V1 to V0
     let id = utils::change_variant(id, TnidVariant::V0);
 
-    Some(id)
+    Ok(id)
 }
 
 #[cfg(all(test, not(debug_assertions)))]

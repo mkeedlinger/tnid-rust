@@ -118,10 +118,78 @@ mod uuidlike;
 mod v0;
 mod v1;
 
+pub use data_encoding::DataEncodingError;
 pub use dynamic_tnid::DynamicTnid;
-pub use name_encoding::{NameBitsValidation, NameStr};
+pub use name_encoding::{NameBitsValidation, NameError, NameStr};
 pub use tnid_variant::TnidVariant;
-pub use uuidlike::UUIDLike;
+pub use uuidlike::{ParseUuidStringError, UUIDLike};
+
+#[cfg(feature = "encryption")]
+pub use encryption::{EncryptionError, EncryptionKeyError};
+
+/// Error when parsing a TNID from a string or u128.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParseTnidError {
+    /// The TNID string has an invalid length (TNID string parsing only).
+    /// Contains the actual length (expected 19-22 characters).
+    InvalidLength(usize),
+    /// The string does not contain a dot separator (TNID string parsing only).
+    MissingSeparator,
+    /// The name portion is invalid (TNID string parsing only).
+    InvalidName(NameError),
+    /// The name in the string/bytes does not match the expected type parameter name.
+    /// Contains the expected name and the actual name found.
+    NameMismatch {
+        /// The expected name from the type parameter
+        expected: &'static str,
+        /// The actual name found in the data
+        found: String,
+    },
+    /// The data portion has an invalid encoding (TNID string parsing only).
+    InvalidDataEncoding(data_encoding::DataEncodingError),
+    /// The UUID string format is invalid (UUID string parsing only).
+    InvalidUuidFormat(ParseUuidStringError),
+    /// The TNID structure has invalid UUID version/variant bits.
+    InvalidUuidBits,
+    /// The name encoding in the bits is invalid (empty or malformed).
+    InvalidNameBits,
+}
+
+impl std::fmt::Display for ParseTnidError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidLength(len) => {
+                write!(f, "TNID string length {len} is invalid; expected 19-22 characters")
+            }
+            Self::MissingSeparator => {
+                write!(f, "TNID string missing dot separator; expected format: <name>.<data>")
+            }
+            Self::InvalidName(e) => write!(f, "invalid TNID name: {e}"),
+            Self::NameMismatch { expected, found } => {
+                write!(f, "name mismatch: expected '{expected}', found '{found}'")
+            }
+            Self::InvalidDataEncoding(e) => write!(f, "invalid TNID data encoding: {e}"),
+            Self::InvalidUuidFormat(e) => write!(f, "invalid UUID format: {e}"),
+            Self::InvalidUuidBits => {
+                write!(f, "invalid UUID version/variant bits; expected UUIDv8")
+            }
+            Self::InvalidNameBits => {
+                write!(f, "invalid name encoding in bits (empty or malformed)")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ParseTnidError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidName(e) => Some(e),
+            Self::InvalidDataEncoding(e) => Some(e),
+            Self::InvalidUuidFormat(e) => Some(e),
+            _ => None,
+        }
+    }
+}
 
 /// Intended to be used on empty structs to create type checked TNID names.
 ///
@@ -574,19 +642,21 @@ impl<Name: TnidName> Tnid<Name> {
     ///
     /// // Parse it back
     /// let parsed = Tnid::<User>::parse_uuid_string(&uuid_string);
-    /// assert!(parsed.is_some());
+    /// assert!(parsed.is_ok());
     /// assert_eq!(parsed.unwrap().as_u128(), original.as_u128());
     ///
     /// // Also accepts uppercase
     /// let uuid_upper = original.to_uuid_string(true);
     /// let parsed_upper = Tnid::<User>::parse_uuid_string(&uuid_upper);
-    /// assert!(parsed_upper.is_some());
+    /// assert!(parsed_upper.is_ok());
     ///
     /// // Invalid: not a valid UUID format
-    /// assert!(Tnid::<User>::parse_uuid_string("not-a-uuid").is_none());
+    /// assert!(Tnid::<User>::parse_uuid_string("not-a-uuid").is_err());
     /// ```
-    pub fn parse_uuid_string(uuid_string: &str) -> Option<Self> {
-        let id = UUIDLike::parse_uuid_string(uuid_string)?.as_u128();
+    pub fn parse_uuid_string(uuid_string: &str) -> Result<Self, ParseTnidError> {
+        let id = UUIDLike::parse_uuid_string(uuid_string)
+            .map_err(ParseTnidError::InvalidUuidFormat)?
+            .as_u128();
 
         Self::from_u128(id)
     }
@@ -596,7 +666,7 @@ impl<Name: TnidName> Tnid<Name> {
     /// This is the inverse of [`Self::to_tnid_string`]. See that method for details
     /// on the TNID string format.
     ///
-    /// Returns `None` if the string is invalid. Validation includes:
+    /// Returns `Err` if the string is invalid. Validation includes:
     /// - Correct format (`<name>.<encoded-data>`)
     /// - Name matches the expected name for this TNID type
     /// - Valid TNID Data Encoding
@@ -617,25 +687,39 @@ impl<Name: TnidName> Tnid<Name> {
     ///
     /// // Successful parsing
     /// let parsed = Tnid::<User>::parse_tnid_string("user.Br2flcNDfF6LYICnT");
-    /// assert!(parsed.is_some());
+    /// assert!(parsed.is_ok());
     ///
     /// // Failed parsing - wrong name
-    /// assert!(Tnid::<User>::parse_tnid_string("post.Br2flcNDfF6LYICnT").is_none());
+    /// assert!(Tnid::<User>::parse_tnid_string("post.Br2flcNDfF6LYICnT").is_err());
     ///
     /// // Failed parsing - invalid format
-    /// assert!(Tnid::<User>::parse_tnid_string("not-a-tnid").is_none());
+    /// assert!(Tnid::<User>::parse_tnid_string("not-a-tnid").is_err());
     /// ```
-    pub fn parse_tnid_string(tnid_string: &str) -> Option<Self> {
+    pub fn parse_tnid_string(tnid_string: &str) -> Result<Self, ParseTnidError> {
+        // Quick length check - valid TNIDs are 19-22 chars (name 1-4 + '.' + data 17)
+        const MIN_LEN: usize = name_encoding::NAME_MIN_CHARS + 1 + data_encoding::DATA_CHAR_ENCODING_LEN as usize;
+        const MAX_LEN: usize = name_encoding::NAME_MAX_CHARS + 1 + data_encoding::DATA_CHAR_ENCODING_LEN as usize;
+
+        if tnid_string.len() < MIN_LEN || tnid_string.len() > MAX_LEN {
+            return Err(ParseTnidError::InvalidLength(tnid_string.len()));
+        }
+
         // Split on dot separator
-        let (name, data_str) = tnid_string.split_once('.')?;
+        let (name, data_str) = tnid_string
+            .split_once('.')
+            .ok_or(ParseTnidError::MissingSeparator)?;
 
         // Validate name matches expected name
         if name != Name::ID_NAME.as_str() {
-            return None;
+            return Err(ParseTnidError::NameMismatch {
+                expected: Name::ID_NAME.as_str(),
+                found: name.to_string(),
+            });
         }
 
         // Decode data string to compact 102 bits
-        let compact_data = data_encoding::string_to_id_data(data_str)?;
+        let compact_data = data_encoding::string_to_id_data(data_str)
+            .map_err(ParseTnidError::InvalidDataEncoding)?;
 
         // Expand to proper bit positions
         let data_bits = data_encoding::expand_data_bits(compact_data);
@@ -656,7 +740,7 @@ impl<Name: TnidName> Tnid<Name> {
     /// databases that store UUIDs as u128/binary, interoperating with UUID-based systems,
     /// or deserializing.
     ///
-    /// Returns `None` if the value is not a valid TNID. Validation includes:
+    /// Returns `Err` if the value is not a valid TNID. Validation includes:
     /// - Correct UUIDv8 version and variant bits
     /// - Name encoding matches the expected name for this TNID type
     ///
@@ -665,10 +749,10 @@ impl<Name: TnidName> Tnid<Name> {
     /// When loading from bytes, you'll almost certainly want to parse a `[u8; 16]` to a
     /// `u128` using big-endian byte order with [`u128::from_be_bytes()`], as per the
     /// UUID specification.
-    pub fn from_u128(id: u128) -> Option<Self> {
+    pub fn from_u128(id: u128) -> Result<Self, ParseTnidError> {
         // check UUIDv8 version and variant bits
         if (id & utils::UUID_V8_MASK) != utils::UUID_V8_MASK {
-            return None;
+            return Err(ParseTnidError::InvalidUuidBits);
         }
 
         // check name encoding matches expected name
@@ -676,10 +760,16 @@ impl<Name: TnidName> Tnid<Name> {
         let actual_name_bits = id & name_bits_mask;
         let expected_name_bits = name_encoding::name_mask(Name::ID_NAME);
         if actual_name_bits != expected_name_bits {
-            return None;
+            // Extract the actual name string for error reporting
+            let found = name_encoding::extract_name_string(id)
+                .ok_or(ParseTnidError::InvalidNameBits)?;
+            return Err(ParseTnidError::NameMismatch {
+                expected: Name::ID_NAME.as_str(),
+                found,
+            });
         }
 
-        Some(Self {
+        Ok(Self {
             id,
             id_name: PhantomData,
         })
@@ -706,7 +796,7 @@ impl<Name: TnidName> Tnid<Name> {
     /// # Example
     ///
     /// ```rust
-    /// use tnid::{Tnid, TnidName, NameStr, TNIDVariant};
+    /// use tnid::{Tnid, TnidName, NameStr, TnidVariant};
     ///
     /// struct User;
     /// impl TnidName for User {
@@ -723,8 +813,8 @@ impl<Name: TnidName> Tnid<Name> {
     /// assert_eq!(decrypted.as_u128(), original.as_u128());
     /// ```
     #[cfg(feature = "encryption")]
-    pub fn encrypt_v0_to_v1(&self, key: impl Into<encryption::EncryptionKey>) -> Result<Self, ()> {
-        let id = encryption::encrypt_id_v0_to_v1(self.id, &key.into()).ok_or(())?;
+    pub fn encrypt_v0_to_v1(&self, key: impl Into<encryption::EncryptionKey>) -> Result<Self, encryption::EncryptionError> {
+        let id = encryption::encrypt_id_v0_to_v1(self.id, &key.into())?;
 
         Ok(Self {
             id_name: PhantomData,
@@ -745,12 +835,12 @@ impl<Name: TnidName> Tnid<Name> {
     ///
     /// - `Ok(decrypted)` for V1 input (decrypts and converts to V0)
     /// - `Ok(self)` for V0 input (already decrypted, returns unchanged)
-    /// - `Err(())` for V2/V3 input (unsupported variants)
+    /// - `Err(EncryptionError)` for V2/V3 input (unsupported variants)
     ///
     /// # Example
     ///
     /// ```rust
-    /// use tnid::{Tnid, TnidName, NameStr, TNIDVariant};
+    /// use tnid::{Tnid, TnidName, NameStr, TnidVariant};
     ///
     /// struct User;
     /// impl TnidName for User {
@@ -767,8 +857,8 @@ impl<Name: TnidName> Tnid<Name> {
     /// assert_eq!(decrypted.as_u128(), original.as_u128());
     /// ```
     #[cfg(feature = "encryption")]
-    pub fn decrypt_v1_to_v0(&self, key: impl Into<encryption::EncryptionKey>) -> Result<Self, ()> {
-        let id = encryption::decrypt_id_v1_to_v0(self.id, &key.into()).ok_or(())?;
+    pub fn decrypt_v1_to_v0(&self, key: impl Into<encryption::EncryptionKey>) -> Result<Self, encryption::EncryptionError> {
+        let id = encryption::decrypt_id_v1_to_v0(self.id, &key.into())?;
 
         Ok(Self {
             id_name: PhantomData,
@@ -852,12 +942,12 @@ mod tests {
     #[test]
     fn parse_tnid_string_invalid_name() {
         let result = Tnid::<TestId>::parse_tnid_string("wrong.abc123xyz");
-        assert!(result.is_none());
+        assert!(result.is_err());
     }
 
     #[test]
     fn parse_tnid_string_no_separator() {
         let result = Tnid::<TestId>::parse_tnid_string("testabc123xyz");
-        assert!(result.is_none());
+        assert!(result.is_err());
     }
 }

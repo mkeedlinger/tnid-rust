@@ -40,10 +40,47 @@
 ///
 /// // Try to convert to TNID - this performs validation
 /// match Tnid::<User>::from_u128(uuid_like.as_u128()) {
-///     Some(tnid) => println!("Valid TNID: {}", tnid),
-///     None => println!("Not a valid TNID (wrong version/variant/name)"),
+///     Ok(tnid) => println!("Valid TNID: {}", tnid),
+///     Err(e) => println!("Not a valid TNID: {}", e),
 /// }
 /// ```
+
+/// Error when parsing a UUID string.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParseUuidStringError {
+    /// The string is not 36 characters long.
+    /// Contains the actual length.
+    WrongLength(usize),
+    /// A hyphen is missing at the expected position.
+    /// Contains the position (8, 13, 18, or 23).
+    MissingHyphen(usize),
+    /// An invalid hexadecimal character was found.
+    /// Contains the position and the invalid byte.
+    InvalidHexChar { position: usize, byte: u8 },
+}
+
+impl std::fmt::Display for ParseUuidStringError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::WrongLength(len) => {
+                write!(f, "UUID string must be 36 characters, got {len}")
+            }
+            Self::MissingHyphen(pos) => {
+                write!(f, "missing hyphen at position {pos}")
+            }
+            Self::InvalidHexChar { position, byte } => {
+                write!(
+                    f,
+                    "invalid hex character '{}' (0x{byte:02x}) at position {position}",
+                    char::from(*byte)
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for ParseUuidStringError {}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct UUIDLike(u128);
 
@@ -115,7 +152,7 @@ impl UUIDLike {
     ///
     /// Accepts both uppercase and lowercase hex digits. Validates format but not TNID-specific requirements.
     ///
-    /// Returns `None` if the string is not a valid UUID hex string.
+    /// Returns `Err` if the string is not a valid UUID hex string.
     ///
     /// # Examples
     ///
@@ -124,51 +161,93 @@ impl UUIDLike {
     ///
     /// // Parse lowercase
     /// let uuid = UUIDLike::parse_uuid_string("cab1952a-f09d-86d9-928e-96ea03dc6af3");
-    /// assert!(uuid.is_some());
+    /// assert!(uuid.is_ok());
     ///
     /// // Parse uppercase
     /// let uuid = UUIDLike::parse_uuid_string("CAB1952A-F09D-86D9-928E-96EA03DC6AF3");
-    /// assert!(uuid.is_some());
+    /// assert!(uuid.is_ok());
     ///
     /// // Parse mixed case
     /// let uuid = UUIDLike::parse_uuid_string("CaB1952a-F09D-86d9-928E-96ea03dc6af3");
-    /// assert!(uuid.is_some());
+    /// assert!(uuid.is_ok());
     ///
     /// // Invalid format
-    /// assert!(UUIDLike::parse_uuid_string("not-a-uuid").is_none());
+    /// assert!(UUIDLike::parse_uuid_string("not-a-uuid").is_err());
     /// ```
-    pub fn parse_uuid_string(uuid_string: &str) -> Option<Self> {
+    pub fn parse_uuid_string(uuid_string: &str) -> Result<Self, ParseUuidStringError> {
         if uuid_string.len() != 36 {
-            return None;
+            return Err(ParseUuidStringError::WrongLength(uuid_string.len()));
         }
 
         let bytes = uuid_string.as_bytes();
-        if bytes.get(8) != Some(&b'-')
-            || bytes.get(13) != Some(&b'-')
-            || bytes.get(18) != Some(&b'-')
-            || bytes.get(23) != Some(&b'-')
-        {
-            return None;
+
+        // Check for hyphens at expected positions
+        for &pos in &[8, 13, 18, 23] {
+            if bytes.get(pos) != Some(&b'-') {
+                return Err(ParseUuidStringError::MissingHyphen(pos));
+            }
         }
 
         // the from_str_radix below should also check that chars are hex digits, so this is redundant, but included for easier debugging
         #[cfg(debug_assertions)]
-        for (i, c) in uuid_string.chars().enumerate() {
+        for (i, &byte) in bytes.iter().enumerate() {
             if i == 8 || i == 13 || i == 18 || i == 23 {
-                if c != '-' {
-                    return None;
+                if byte != b'-' {
+                    return Err(ParseUuidStringError::MissingHyphen(i));
                 }
-            } else if !c.is_ascii_hexdigit() {
-                return None;
+            } else if !byte.is_ascii_hexdigit() {
+                return Err(ParseUuidStringError::InvalidHexChar {
+                    position: i,
+                    byte,
+                });
             }
         }
 
         // parse 5 hyphen-separated sections as hex
-        let s1 = u32::from_str_radix(&uuid_string[0..8], 16).ok()?;
-        let s2 = u16::from_str_radix(&uuid_string[9..13], 16).ok()?;
-        let s3 = u16::from_str_radix(&uuid_string[14..18], 16).ok()?;
-        let s4 = u16::from_str_radix(&uuid_string[19..23], 16).ok()?;
-        let s5 = u64::from_str_radix(&uuid_string[24..36], 16).ok()?;
+        // If parsing fails, it means there's an invalid hex character somewhere
+        // We need to find it since from_str_radix doesn't tell us which one
+        let s1 = u32::from_str_radix(&uuid_string[0..8], 16).map_err(|_| {
+            // Find the invalid character
+            for (i, &byte) in bytes.get(0..8).unwrap_or(&[]).iter().enumerate() {
+                if !byte.is_ascii_hexdigit() {
+                    return ParseUuidStringError::InvalidHexChar { position: i, byte };
+                }
+            }
+            // Shouldn't reach here, but if we do just use WrongLength as a fallback
+            ParseUuidStringError::WrongLength(uuid_string.len())
+        })?;
+        let s2 = u16::from_str_radix(&uuid_string[9..13], 16).map_err(|_| {
+            for (i, &byte) in bytes.get(9..13).unwrap_or(&[]).iter().enumerate() {
+                if !byte.is_ascii_hexdigit() {
+                    return ParseUuidStringError::InvalidHexChar { position: 9 + i, byte };
+                }
+            }
+            ParseUuidStringError::WrongLength(uuid_string.len())
+        })?;
+        let s3 = u16::from_str_radix(&uuid_string[14..18], 16).map_err(|_| {
+            for (i, &byte) in bytes.get(14..18).unwrap_or(&[]).iter().enumerate() {
+                if !byte.is_ascii_hexdigit() {
+                    return ParseUuidStringError::InvalidHexChar { position: 14 + i, byte };
+                }
+            }
+            ParseUuidStringError::WrongLength(uuid_string.len())
+        })?;
+        let s4 = u16::from_str_radix(&uuid_string[19..23], 16).map_err(|_| {
+            for (i, &byte) in bytes.get(19..23).unwrap_or(&[]).iter().enumerate() {
+                if !byte.is_ascii_hexdigit() {
+                    return ParseUuidStringError::InvalidHexChar { position: 19 + i, byte };
+                }
+            }
+            ParseUuidStringError::WrongLength(uuid_string.len())
+        })?;
+        let s5 = u64::from_str_radix(&uuid_string[24..36], 16).map_err(|_| {
+            for (i, &byte) in bytes.get(24..36).unwrap_or(&[]).iter().enumerate() {
+                if !byte.is_ascii_hexdigit() {
+                    return ParseUuidStringError::InvalidHexChar { position: 24 + i, byte };
+                }
+            }
+            ParseUuidStringError::WrongLength(uuid_string.len())
+        })?;
 
         // Combine sections into u128 (reverse of to_uuid_string)
         let id = ((s1 as u128) << 96)
@@ -177,7 +256,7 @@ impl UUIDLike {
             | ((s4 as u128) << 48)
             | (s5 as u128);
 
-        Some(Self(id))
+        Ok(Self(id))
     }
 }
 
@@ -200,7 +279,7 @@ mod tests {
     #[test]
     fn parse_mixed_case() {
         let result = UUIDLike::parse_uuid_string("AaBbCcDd-1234-5678-90aB-cDeF01234567");
-        assert!(result.is_some());
+        assert!(result.is_ok());
     }
 
     #[test]

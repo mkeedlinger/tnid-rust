@@ -1,7 +1,7 @@
 /// The 4 possible TNID variants.
 ///
 /// Similar to UUID variants, TNID variants have different construction that makes them useful for different situations.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TnidVariant {
     /// V0 is most like UUIDv7, and is meant to be time-sortable. See [`Tnid::new_v0`](crate::Tnid::new_v0).
     V0,

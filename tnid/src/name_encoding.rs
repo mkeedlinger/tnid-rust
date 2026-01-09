@@ -31,11 +31,11 @@
 //! let name4 = NameStr::new("test").unwrap();  // 4 characters (max)
 //!
 //! // Invalid names
-//! assert!(NameStr::new("").is_none());           // Too short
-//! assert!(NameStr::new("toolong").is_none());    // Too long (>4 chars)
-//! assert!(NameStr::new("User").is_none());       // Uppercase not allowed
-//! assert!(NameStr::new("a-b").is_none());        // Dash not allowed
-//! assert!(NameStr::new("test9").is_none());      // Digit 9 not in allowed set
+//! assert!(NameStr::new("").is_err());           // Too short
+//! assert!(NameStr::new("toolong").is_err());    // Too long (>4 chars)
+//! assert!(NameStr::new("User").is_err());       // Uppercase not allowed
+//! assert!(NameStr::new("a-b").is_err());        // Dash not allowed
+//! assert!(NameStr::new("test9").is_err());      // Digit 9 not in allowed set
 //! ```
 
 #[allow(clippy::indexing_slicing)] // panic is expected error path
@@ -122,6 +122,42 @@ pub const CHAR_MAPPING: [(u8, u8); 31] = [
     (31, b'z'),
 ];
 
+/// Error when creating a [`NameStr`] from a string.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NameError {
+    /// The name string is empty (must be at least 1 character).
+    Empty,
+    /// The name string exceeds the maximum length of 4 characters.
+    /// Contains the actual length provided.
+    TooLong(usize),
+    /// The name contains non-ASCII characters.
+    NonAscii,
+    /// The name contains a character not in the allowed set (0-4, a-z).
+    /// Contains the invalid byte value.
+    InvalidChar(u8),
+}
+
+impl std::fmt::Display for NameError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Empty => write!(f, "name cannot be empty"),
+            Self::TooLong(len) => {
+                write!(f, "name length {len} exceeds maximum of 4 characters")
+            }
+            Self::NonAscii => write!(f, "name must contain only ASCII characters"),
+            Self::InvalidChar(byte) => {
+                write!(
+                    f,
+                    "invalid character '{}' (0x{byte:02x}) in name; only 0-4 and a-z are allowed",
+                    char::from(*byte)
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for NameError {}
+
 /// A validated TNID name string.
 ///
 /// This type wraps a string slice and ensures it meets all TNID name requirements:
@@ -138,9 +174,9 @@ pub const CHAR_MAPPING: [(u8, u8); 31] = [
 /// let name = NameStr::new("user").unwrap();
 /// assert_eq!(name.as_str(), "user");
 ///
-/// // Invalid names return None
-/// assert!(NameStr::new("").is_none());
-/// assert!(NameStr::new("CAPS").is_none());
+/// // Invalid names return Err
+/// assert!(NameStr::new("").is_err());
+/// assert!(NameStr::new("CAPS").is_err());
 /// ```
 pub struct NameStr<'a>(&'a str);
 impl<'a> NameStr<'a> {
@@ -191,7 +227,7 @@ impl<'a> NameStr<'a> {
 
     /// Creates a new `NameStr` with runtime validation.
     ///
-    /// Returns `Some(NameStr)` if the string is a valid TNID name, or `None` if it's invalid.
+    /// Returns `Ok(NameStr)` if the string is a valid TNID name, or `Err(NameError)` if it's invalid.
     ///
     /// # Examples
     ///
@@ -199,29 +235,33 @@ impl<'a> NameStr<'a> {
     /// use tnid::NameStr;
     ///
     /// // Valid names (1-4 chars, digits 0-4 and lowercase a-z only)
-    /// assert!(NameStr::new("user").is_some());
-    /// assert!(NameStr::new("post").is_some());
-    /// assert!(NameStr::new("a").is_some());
-    /// assert!(NameStr::new("test").is_some());
-    /// assert!(NameStr::new("id0").is_some());
+    /// assert!(NameStr::new("user").is_ok());
+    /// assert!(NameStr::new("post").is_ok());
+    /// assert!(NameStr::new("a").is_ok());
+    /// assert!(NameStr::new("test").is_ok());
+    /// assert!(NameStr::new("id0").is_ok());
     ///
     /// // Too short or too long
-    /// assert!(NameStr::new("").is_none());
-    /// assert!(NameStr::new("toolong").is_none());
+    /// assert!(NameStr::new("").is_err());
+    /// assert!(NameStr::new("toolong").is_err());
     ///
     /// // Invalid characters
-    /// assert!(NameStr::new("User").is_none());    // uppercase not allowed
-    /// assert!(NameStr::new("id5").is_none());     // digits 5-9 not allowed
-    /// assert!(NameStr::new("a-b").is_none());     // special chars not allowed
-    /// assert!(NameStr::new("café").is_none());    // non-ASCII not allowed
+    /// assert!(NameStr::new("User").is_err());    // uppercase not allowed
+    /// assert!(NameStr::new("id5").is_err());     // digits 5-9 not allowed
+    /// assert!(NameStr::new("a-b").is_err());     // special chars not allowed
+    /// assert!(NameStr::new("café").is_err());    // non-ASCII not allowed
     /// ```
-    pub fn new(s: &'a str) -> Option<Self> {
-        if s.len() > NAME_MAX_CHARS || s.len() < NAME_MIN_CHARS {
-            return None;
+    pub fn new(s: &'a str) -> Result<Self, NameError> {
+        if s.is_empty() {
+            return Err(NameError::Empty);
+        }
+
+        if s.len() > NAME_MAX_CHARS {
+            return Err(NameError::TooLong(s.len()));
         }
 
         if !s.is_ascii() {
-            return None;
+            return Err(NameError::NonAscii);
         }
 
         // Check all characters are in CHAR_MAPPING
@@ -235,11 +275,11 @@ impl<'a> NameStr<'a> {
                 }
             }
             if !found {
-                return None;
+                return Err(NameError::InvalidChar(byte));
             }
         }
 
-        Some(Self(s))
+        Ok(Self(s))
     }
 
     /// Returns the validated name as a string slice.
@@ -372,7 +412,7 @@ mod tests_release {
         })]
         #[test]
         fn name_mask_no_panic(name: String) {
-            let Some(name) = NameStr::new(name.as_str()) else {
+            let Ok(name) = NameStr::new(name.as_str()) else {
                 return Ok(());
             };
 

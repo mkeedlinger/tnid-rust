@@ -64,7 +64,7 @@ impl<Name: TnidName> TryFrom<uuid::Uuid> for Tnid<Name> {
 
     fn try_from(uuid: uuid::Uuid) -> Result<Self, Self::Error> {
         let u128_val = uuid.as_u128();
-        Tnid::<Name>::from_u128(u128_val).ok_or(TnidFromUuidError::InvalidTnid)
+        Tnid::<Name>::from_u128(u128_val).map_err(|_| TnidFromUuidError::InvalidTnid)
     }
 }
 
