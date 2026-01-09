@@ -107,7 +107,7 @@ use std::marker::PhantomData;
 
 mod data_encoding;
 #[cfg(feature = "encryption")]
-mod encryption;
+pub mod encryption;
 mod name_encoding;
 mod tnid_variant;
 mod utils;
@@ -689,27 +689,25 @@ impl<Name: TNIDName> TNID<Name> {
         })
     }
 
-    /// Encrypts a V0 TNID to a V1 TNID using AES-128.
+    /// Encrypts a V0 TNID to a V1 TNID, hiding timestamp information.
     ///
-    /// This encrypts the data bits while preserving the name. The encrypted TNID will be
-    /// a valid V1 variant, hiding the timestamp information present in V0. The encryption
-    /// is reversible with [`Self::decrypt_v1_to_v0`] using the same secret.
+    /// V0 TNIDs contain a timestamp (like UUIDv7), which may leak information when exposed
+    /// publicly. This method encrypts the data bits to produce a valid V1 TNID that hides
+    /// the timestamp while remaining decryptable with [`Self::decrypt_v1_to_v0`].
     ///
-    /// V0 TNIDs expose when they were created (like UUIDv7), which may not be desirable
-    /// when TNIDs are public. Encrypting to V1 produces a valid high-entropy V1 TNID
-    /// while remaining decryptable on the backend.
+    /// See the [`encryption`] module for more details on why and how this works.
     ///
     /// # Parameters
     ///
     /// - `secret`: 128-bit (16 bytes) encryption key
     ///
-    /// # Behavior by Input TNID Variant
+    /// # Returns
     ///
-    /// - **V0**: Encrypts data bits and converts to V1
-    /// - **V1**: Returns the TNID unchanged (already V1)
-    /// - **V2/V3**: Returns `Err(())` (unsupported variants)
+    /// - `Ok(encrypted)` for V0 input (encrypts and converts to V1)
+    /// - `Ok(self)` for V1 input (already encrypted, returns unchanged)
+    /// - `Err(())` for V2/V3 input (unsupported variants)
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```rust
     /// use tnid::{TNID, TNIDName, NameStr, TNIDVariant};
@@ -722,19 +720,14 @@ impl<Name: TNIDName> TNID<Name> {
     /// let secret = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
     ///
     /// let original = TNID::<User>::new_v0();
-    /// assert_eq!(original.variant(), TNIDVariant::V0);
-    ///
-    /// // Encrypt V0 to V1
     /// let encrypted = original.encrypt_v0_to_v1(secret).unwrap();
     /// assert_eq!(encrypted.variant(), TNIDVariant::V1);
     ///
-    /// // Decrypt back to V0
     /// let decrypted = encrypted.decrypt_v1_to_v0(secret).unwrap();
-    /// assert_eq!(decrypted.variant(), TNIDVariant::V0);
     /// assert_eq!(decrypted.as_u128(), original.as_u128());
     /// ```
     #[cfg(feature = "encryption")]
-    pub fn encrypt_v0_to_v1(&self, secret: [u8; 16]) -> Result<Self, ()> {
+    pub fn encrypt_v0_to_v1(&self, key: impl Into<encryption::EncryptionKey>) -> Result<Self, ()> {
         match self.variant() {
             TNIDVariant::V0 => {}
             TNIDVariant::V1 => return Ok(*self),
@@ -746,7 +739,7 @@ impl<Name: TNIDName> TNID<Name> {
         let secret_data = encryption::extract_secret_data_bits(self.id);
 
         // Encrypt the secret data
-        let encrypted_data = encryption::encrypt(secret_data, &secret);
+        let encrypted_data = encryption::encrypt(secret_data, &key.into());
 
         // Expand back to proper bit positions
         let expanded = encryption::expand_secret_data_bits(encrypted_data);
@@ -763,22 +756,22 @@ impl<Name: TNIDName> TNID<Name> {
         })
     }
 
-    /// Decrypts a V1 TNID to a V0 TNID using AES-128.
+    /// Decrypts a V1 TNID back to a V0 TNID, recovering timestamp information.
     ///
-    /// This is the inverse of [`Self::encrypt_v0_to_v1`]. It decrypts the data bits while
-    /// preserving the name, converting a V1 TNID back to V0 to recover the original ID.
+    /// This is the inverse of [`Self::encrypt_v0_to_v1`]. See the [`encryption`] module
+    /// for more details.
     ///
     /// # Parameters
     ///
     /// - `secret`: 128-bit (16 bytes) encryption key (must match the key used for encryption)
     ///
-    /// # Behavior by Input TNID Variant
+    /// # Returns
     ///
-    /// - **V0**: Returns the TNID unchanged (already V0)
-    /// - **V1**: Decrypts data bits and converts to V0
-    /// - **V2/V3**: Returns `Err(())` (unsupported variants)
+    /// - `Ok(decrypted)` for V1 input (decrypts and converts to V0)
+    /// - `Ok(self)` for V0 input (already decrypted, returns unchanged)
+    /// - `Err(())` for V2/V3 input (unsupported variants)
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```rust
     /// use tnid::{TNID, TNIDName, NameStr, TNIDVariant};
@@ -793,13 +786,12 @@ impl<Name: TNIDName> TNID<Name> {
     /// let original = TNID::<User>::new_v0();
     /// let encrypted = original.encrypt_v0_to_v1(secret).unwrap();
     ///
-    /// // Decrypt back to V0
     /// let decrypted = encrypted.decrypt_v1_to_v0(secret).unwrap();
     /// assert_eq!(decrypted.variant(), TNIDVariant::V0);
     /// assert_eq!(decrypted.as_u128(), original.as_u128());
     /// ```
     #[cfg(feature = "encryption")]
-    pub fn decrypt_v1_to_v0(&self, secret: [u8; 16]) -> Result<Self, ()> {
+    pub fn decrypt_v1_to_v0(&self, key: impl Into<encryption::EncryptionKey>) -> Result<Self, ()> {
         match self.variant() {
             TNIDVariant::V0 => return Ok(*self),
             TNIDVariant::V1 => {}
@@ -811,7 +803,7 @@ impl<Name: TNIDName> TNID<Name> {
         let encrypted_data = encryption::extract_secret_data_bits(self.id);
 
         // Decrypt the secret data
-        let decrypted_data = encryption::decrypt(encrypted_data, &secret);
+        let decrypted_data = encryption::decrypt(encrypted_data, &key.into());
 
         // Expand back to proper bit positions
         let expanded = encryption::expand_secret_data_bits(decrypted_data);
