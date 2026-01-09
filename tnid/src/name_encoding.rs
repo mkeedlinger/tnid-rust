@@ -377,7 +377,7 @@ pub fn extract_name_string(id: u128) -> Option<String> {
     // Extract 4 characters of 5 bits each
     for i in (0..NAME_MAX_CHARS).rev() {
         let shift = i * CHAR_BIT_LENGTH as usize;
-        let encoded_byte = ((name_bits >> shift) as u8 & CHAR_MASK) as u8;
+        let encoded_byte = (name_bits >> shift) as u8 & CHAR_MASK;
 
         // 0 is null terminator - stop decoding
         if encoded_byte == 0 {

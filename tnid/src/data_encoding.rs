@@ -137,7 +137,7 @@ pub fn id_data_to_string(id: u128) -> String {
         s.push(*char as char);
     }
 
-    debug_assert_eq!(s.len(), DATA_CHAR_ENCODING_LEN.into());
+    debug_assert_eq!(s.len(), DATA_CHAR_ENCODING_LEN as usize);
     s
 }
 
@@ -174,9 +174,7 @@ pub(crate) fn extract_data_bits(id: u128) -> u128 {
     let extracted = extracted | ((id & MIDDLE_DATA_SECTION_MASK) >> BETWEEN_MIDDLE_RIGHT);
 
     const BETWEEN_LEFT_MIDDLE: i32 = BETWEEN_MIDDLE_RIGHT + 4;
-    let extracted = extracted | ((id & LEFT_DATA_SECTION_MASK) >> BETWEEN_LEFT_MIDDLE);
-
-    extracted
+    extracted | ((id & LEFT_DATA_SECTION_MASK) >> BETWEEN_LEFT_MIDDLE)
 }
 
 /// Expand compacted data bits back into their positions (inverse of extract_data_bits)
@@ -192,15 +190,12 @@ pub(crate) fn expand_data_bits(compact_bits: u128) -> u128 {
     // Left section shifts left
     const BETWEEN_LEFT_MIDDLE: i32 = BETWEEN_MIDDLE_RIGHT + 4;
     let left_mask = LEFT_DATA_SECTION_MASK >> BETWEEN_LEFT_MIDDLE;
-    let expanded = expanded | ((compact_bits & left_mask) << BETWEEN_LEFT_MIDDLE);
-
-    expanded
+    expanded | ((compact_bits & left_mask) << BETWEEN_LEFT_MIDDLE)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::u128;
 
     const COMPLETE_DATA_MASK: u128 =
         RIGHT_DATA_SECTION_MASK | MIDDLE_DATA_SECTION_MASK | LEFT_DATA_SECTION_MASK;
@@ -209,25 +204,25 @@ mod tests {
     fn data_extract_correctly() {
         let extract = extract_data_bits(u128::MAX);
         assert_eq!(extract.leading_zeros(), 26);
-        assert_eq!((extract).count_ones(), DATA_BIT_NUM.into());
+        assert_eq!((extract).count_ones(), DATA_BIT_NUM as u32);
 
-        assert_eq!((COMPLETE_DATA_MASK).count_ones(), DATA_BIT_NUM.into());
+        assert_eq!((COMPLETE_DATA_MASK).count_ones(), DATA_BIT_NUM as u32);
 
         let extract = extract_data_bits(COMPLETE_DATA_MASK);
         assert_eq!(extract.leading_zeros(), 26);
-        assert_eq!((extract).count_ones(), DATA_BIT_NUM.into());
+        assert_eq!((extract).count_ones(), DATA_BIT_NUM as u32);
 
-        assert_eq!((COMPLETE_DATA_MASK).count_ones(), DATA_BIT_NUM.into());
+        assert_eq!((COMPLETE_DATA_MASK).count_ones(), DATA_BIT_NUM as u32);
     }
 
     #[test]
     fn data_encodes_correctly() {
         let encoded = id_data_to_string(COMPLETE_DATA_MASK);
-        assert_eq!(encoded.len(), DATA_CHAR_ENCODING_LEN.into());
+        assert_eq!(encoded.len(), DATA_CHAR_ENCODING_LEN as usize);
         assert_eq!(encoded, String::from("zzzzzzzzzzzzzzzzz"));
 
         let encoded = id_data_to_string(0u128);
-        assert_eq!(encoded.len(), DATA_CHAR_ENCODING_LEN.into());
+        assert_eq!(encoded.len(), DATA_CHAR_ENCODING_LEN as usize);
         assert_eq!(encoded, String::from("-----------------"));
     }
 
@@ -243,7 +238,7 @@ mod tests {
     fn string_to_id_data_roundtrip() {
         let original_id = 0x00000abc_def1_2345_6789_abcdef123456u128;
         let string = id_data_to_string(original_id);
-        let decoded = string_to_id_data(&string).unwrap();
+        let decoded = string_to_id_data(&string).expect("valid encoding");
         assert_eq!(decoded, extract_data_bits(original_id));
     }
 }

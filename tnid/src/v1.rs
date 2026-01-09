@@ -19,8 +19,6 @@ pub fn make_from_parts(name: NameStr, random: u128) -> u128 {
 
 #[cfg(test)]
 mod tests {
-    use std::u128;
-
     use super::*;
 
     #[test]

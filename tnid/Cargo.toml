@@ -6,6 +6,7 @@ description = "A UUID compatible ID with static type checking"
 license = "MIT"
 documentation = "https://docs.rs/tnid"
 repository = "https://github.com/mkeedlinger/tnid-rust"
+readme = "README.md"
 
 [dependencies]
 aes = { version = "0.8.4", optional = true }
@@ -13,10 +14,14 @@ fpe = { version = "0.6.1", optional = true }
 rand = { version = "0.8.5", optional = true }
 time = { version = "0.3.36", optional = true }
 uuid = { version = "1", optional = true }
+serde = { version = "1", optional = true }
+sqlx = { version = "0.8.3", default-features = false, optional = true }
 
 [dev-dependencies]
 uuid = { version = "1", features = ["v4"] }
 proptest = "1.9.0"
+serde_json = "1"
+bincode = "1"
 
 
 [features]
@@ -25,6 +30,10 @@ encryption = ["dep:aes", "dep:fpe"]
 time = ["dep:time"]
 rand = ["dep:rand"]
 uuid = ["dep:uuid"]
+serde = ["dep:serde"]
+sqlx-postgres = ["dep:sqlx", "sqlx/postgres"]
+sqlx-mysql = ["dep:sqlx", "sqlx/mysql"]
+sqlx-sqlite = ["dep:sqlx", "sqlx/sqlite"]
 
 # docs.rs-specific configuration
 # https://docs.rs/about/metadata

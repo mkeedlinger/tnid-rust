@@ -1,4 +1,4 @@
-use crate::TnidVariant;
+use crate::{Case, TnidVariant};
 
 pub const UUID_V8_MASK: u128 = 0x00000000_0000_8000_8000_000000000000;
 
@@ -22,7 +22,7 @@ pub fn change_variant(id: u128, to_variant: TnidVariant) -> u128 {
     id_without_variant | (new_variant << 60)
 }
 
-pub fn u128_to_uuid_string(id: u128, uppercase: bool) -> String {
+pub fn u128_to_uuid_string(id: u128, case: Case) -> String {
     // Format as UUID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
     let first_section = (id >> 96) as u32;
     let second_section = ((id >> 80) & 0xffff) as u16;
@@ -30,16 +30,15 @@ pub fn u128_to_uuid_string(id: u128, uppercase: bool) -> String {
     let fourth_section = ((id >> 48) & 0xffff) as u16;
     let fifth_section = (id & 0xffffffffffff) as u64;
 
-    if uppercase {
-        format!(
+    match case {
+        Case::Upper => format!(
             "{:08X}-{:04X}-{:04X}-{:04X}-{:012X}",
             first_section, second_section, third_section, fourth_section, fifth_section
-        )
-    } else {
-        format!(
+        ),
+        Case::Lower => format!(
             "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
             first_section, second_section, third_section, fourth_section, fifth_section
-        )
+        ),
     }
 }
 
@@ -54,5 +53,18 @@ mod tests {
         assert_eq!(mask.leading_zeros(), 48);
         assert_eq!(mask.trailing_zeros(), 63);
         assert_eq!(mask.count_ones(), 2);
+    }
+
+    #[test]
+    fn change_variant_changes_only_variant_bits() {
+        let id: u128 = 0x0123_4567_89ab_cdef_0123_4567_89ab_cdef;
+        let v0 = change_variant(id, TnidVariant::V0);
+        let v1 = change_variant(id, TnidVariant::V1);
+
+        // Only bits 60-61 should differ.
+        let mask = 0b11u128 << 60;
+        assert_eq!(id & !mask, v0 & !mask);
+        assert_eq!(id & !mask, v1 & !mask);
+        assert_ne!(v0 & mask, v1 & mask);
     }
 }

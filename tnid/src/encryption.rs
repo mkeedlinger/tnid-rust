@@ -59,7 +59,7 @@
 use aes::Aes128;
 use fpe::ff1::{FF1, FlexibleNumeralString};
 
-use crate::{utils, TnidVariant};
+use crate::{TnidVariant, utils};
 
 /// Error when creating an [`EncryptionKey`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,8 +68,13 @@ pub enum EncryptionKeyError {
     /// Contains the actual length.
     WrongHexLength(usize),
     /// An invalid hex character was found.
-    /// Contains the position and the invalid byte.
-    InvalidHexChar { position: usize, byte: u8 },
+    /// Contains the position and the invalid Unicode scalar value.
+    InvalidHexChar {
+        /// Byte index into the input string.
+        position: usize,
+        /// The invalid character (as read from the input).
+        character: char,
+    },
     /// The byte slice is not 16 bytes long.
     /// Contains the actual length.
     WrongByteLength(usize),
@@ -79,13 +84,19 @@ impl std::fmt::Display for EncryptionKeyError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::WrongHexLength(len) => {
-                write!(f, "encryption key hex string must be 32 characters, got {len}")
-            }
-            Self::InvalidHexChar { position, byte } => {
                 write!(
                     f,
-                    "invalid hex character '{}' (0x{byte:02x}) at position {position}",
-                    char::from(*byte)
+                    "encryption key hex string must be 32 characters, got {len}"
+                )
+            }
+            Self::InvalidHexChar {
+                position,
+                character,
+            } => {
+                write!(
+                    f,
+                    "invalid hex character '{}' (U+{:04X}) at position {position}",
+                    character, *character as u32
                 )
             }
             Self::WrongByteLength(len) => {
@@ -109,7 +120,10 @@ impl std::fmt::Display for EncryptionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::UnsupportedVariant(variant) => {
-                write!(f, "TNID variant {variant:?} is not supported for encryption/decryption")
+                write!(
+                    f,
+                    "TNID variant {variant:?} is not supported for encryption/decryption"
+                )
             }
         }
     }
@@ -177,15 +191,24 @@ impl EncryptionKey {
         let mut bytes = [0u8; 16];
         for (i, chunk) in bytes_slice.chunks(2).enumerate() {
             let pos = i * 2;
-            let high_byte = *chunk.first().ok_or(EncryptionKeyError::WrongHexLength(s.len()))?;
-            let low_byte = *chunk.get(1).ok_or(EncryptionKeyError::WrongHexLength(s.len()))?;
+            let high_byte = *chunk.first().expect("hex chunk should have first byte");
+            let low_byte = *chunk.get(1).expect("hex chunk should have second byte"); // todo: make proptests for this
 
-            let high = hex_char_to_nibble(high_byte)
-                .ok_or(EncryptionKeyError::InvalidHexChar { position: pos, byte: high_byte })?;
-            let low = hex_char_to_nibble(low_byte)
-                .ok_or(EncryptionKeyError::InvalidHexChar { position: pos + 1, byte: low_byte })?;
+            let high_char = high_byte as char;
+            let low_char = low_byte as char;
 
-            let byte_slot = bytes.get_mut(i).ok_or(EncryptionKeyError::WrongHexLength(s.len()))?;
+            let high = hex_char_to_nibble(high_byte).ok_or(EncryptionKeyError::InvalidHexChar {
+                position: pos,
+                character: high_char,
+            })?;
+            let low = hex_char_to_nibble(low_byte).ok_or(EncryptionKeyError::InvalidHexChar {
+                position: pos + 1,
+                character: low_char,
+            })?;
+
+            let byte_slot = bytes
+                .get_mut(i)
+                .expect("hex chunk index must fit into output buffer");
             *byte_slot = (high << 4) | low;
         }
 
@@ -208,7 +231,8 @@ impl EncryptionKey {
     /// assert!(EncryptionKey::from_slice(&[1, 2, 3]).is_err());
     /// ```
     pub fn from_slice(s: &[u8]) -> Result<Self, EncryptionKeyError> {
-        let bytes: [u8; 16] = s.try_into()
+        let bytes: [u8; 16] = s
+            .try_into()
             .map_err(|_| EncryptionKeyError::WrongByteLength(s.len()))?;
         Ok(Self(bytes))
     }
@@ -250,9 +274,7 @@ pub(crate) fn extract_secret_data_bits(id: u128) -> u128 {
     let extracted = extracted | ((id & MIDDLE_SECRET_DATA_SECTION_MASK) >> BETWEEN_MIDDLE_RIGHT);
 
     const BETWEEN_LEFT_MIDDLE: i32 = BETWEEN_MIDDLE_RIGHT + 4;
-    let extracted = extracted | ((id & LEFT_SECRET_DATA_SECTION_MASK) >> BETWEEN_LEFT_MIDDLE);
-
-    extracted
+    extracted | ((id & LEFT_SECRET_DATA_SECTION_MASK) >> BETWEEN_LEFT_MIDDLE)
 }
 
 /// Expand compacted secret data bits back into their positions (inverse of extract_secret_data_bits)
@@ -268,9 +290,7 @@ pub(crate) fn expand_secret_data_bits(bits: u128) -> u128 {
     // Left section shifts left
     const BETWEEN_LEFT_MIDDLE: i32 = BETWEEN_MIDDLE_RIGHT + 4;
     let left_mask = LEFT_SECRET_DATA_SECTION_MASK >> BETWEEN_LEFT_MIDDLE;
-    let expanded = expanded | ((bits & left_mask) << BETWEEN_LEFT_MIDDLE);
-
-    expanded
+    expanded | ((bits & left_mask) << BETWEEN_LEFT_MIDDLE)
 }
 
 const SECRET_DATA_BIT_NUM: u8 = COMPLETE_SECRET_DATA_MASK.count_ones() as u8;
@@ -398,7 +418,8 @@ mod tests_release {
         })]
         #[test]
         fn decrypt_no_panic(id_secret_data: u128, secret: u128) {
-            decrypt(id_secret_data, &secret.to_le_bytes());
+            let key: EncryptionKey = secret.to_le_bytes().into();
+            decrypt(id_secret_data, &key);
         }
     }
 }
@@ -406,22 +427,21 @@ mod tests_release {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::u128;
 
     #[test]
     fn secret_data_extract_correctly() {
         let extract = extract_secret_data_bits(u128::MAX);
         assert_eq!(extract.leading_zeros(), 28);
-        assert_eq!(extract.count_ones(), SECRET_DATA_BIT_NUM.into());
+        assert_eq!(extract.count_ones(), SECRET_DATA_BIT_NUM as u32);
 
         assert_eq!(
             COMPLETE_SECRET_DATA_MASK.count_ones(),
-            SECRET_DATA_BIT_NUM.into()
+            SECRET_DATA_BIT_NUM as u32
         );
 
         let extract = extract_secret_data_bits(COMPLETE_SECRET_DATA_MASK);
         assert_eq!(extract.leading_zeros(), 28);
-        assert_eq!(extract.count_ones(), SECRET_DATA_BIT_NUM.into());
+        assert_eq!(extract.count_ones(), SECRET_DATA_BIT_NUM as u32);
     }
 
     #[test]
@@ -429,7 +449,7 @@ mod tests {
         // Expand should produce the mask when given all 100 bits set
         let expanded = expand_secret_data_bits(u128::MAX);
         assert_eq!(expanded, COMPLETE_SECRET_DATA_MASK);
-        assert_eq!(expanded.count_ones(), SECRET_DATA_BIT_NUM.into());
+        assert_eq!(expanded.count_ones(), SECRET_DATA_BIT_NUM as u32);
     }
 
     #[test]

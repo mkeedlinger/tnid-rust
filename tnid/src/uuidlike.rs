@@ -15,14 +15,14 @@
 ///
 /// Basic usage:
 /// ```rust
-/// use tnid::UUIDLike;
+/// use tnid::{Case, UUIDLike};
 ///
 /// // Create from any 128-bit value
 /// let uuid_like = UUIDLike::new(0x12345678_1234_1234_1234_123456789abc);
 ///
 /// // Convert to different representations
 /// let as_u128 = uuid_like.as_u128();
-/// let as_string = uuid_like.to_uuid_string(false);
+/// let as_string = uuid_like.to_uuid_string(Case::Lower);
 /// ```
 ///
 /// Inspecting potentially invalid TNIDs:
@@ -44,7 +44,7 @@
 ///     Err(e) => println!("Not a valid TNID: {}", e),
 /// }
 /// ```
-
+///
 /// Error when parsing a UUID string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParseUuidStringError {
@@ -55,8 +55,13 @@ pub enum ParseUuidStringError {
     /// Contains the position (8, 13, 18, or 23).
     MissingHyphen(usize),
     /// An invalid hexadecimal character was found.
-    /// Contains the position and the invalid byte.
-    InvalidHexChar { position: usize, byte: u8 },
+    /// Contains the position and the invalid Unicode scalar value.
+    InvalidHexChar {
+        /// Byte index into the input string.
+        position: usize,
+        /// The invalid character (as read from the input).
+        character: char,
+    },
 }
 
 impl std::fmt::Display for ParseUuidStringError {
@@ -68,11 +73,14 @@ impl std::fmt::Display for ParseUuidStringError {
             Self::MissingHyphen(pos) => {
                 write!(f, "missing hyphen at position {pos}")
             }
-            Self::InvalidHexChar { position, byte } => {
+            Self::InvalidHexChar {
+                position,
+                character,
+            } => {
                 write!(
                     f,
-                    "invalid hex character '{}' (0x{byte:02x}) at position {position}",
-                    char::from(*byte)
+                    "invalid hex character '{}' (U+{:04X}) at position {position}",
+                    character, *character as u32
                 )
             }
         }
@@ -81,12 +89,25 @@ impl std::fmt::Display for ParseUuidStringError {
 
 impl std::error::Error for ParseUuidStringError {}
 
+/// The case (upper/lower) for hexadecimal string formatting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Case {
+    /// Use lowercase hex digits (`a-f`).
+    Lower,
+    /// Use uppercase hex digits (`A-F`).
+    Upper,
+}
+
+/// A wrapper for 128-bit values that may or may not be valid TNIDs (or UUIDs for that matter).
+///
+/// `UUIDLike` provides parsing and formatting of UUID strings and conversion to/from `u128`,
+/// without enforcing validation rules.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct UUIDLike(u128);
 
 impl std::fmt::Debug for UUIDLike {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_uuid_string(false))
+        write!(f, "{}", self.to_uuid_string(Case::Lower))
     }
 }
 
@@ -127,23 +148,23 @@ impl UUIDLike {
     ///
     /// # Parameters
     ///
-    /// - `uppercase`: If `true`, uses uppercase hex digits (A-F). If `false`, uses lowercase (a-f).
+    /// - `case`: Whether to use uppercase (`A-F`) or lowercase (`a-f`) hex digits.
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::UUIDLike;
+    /// use tnid::{Case, UUIDLike};
     ///
     /// let uuid_like = UUIDLike::new(0xCAB1952A_F09D_86D9_928E_96EA03DC6AF3);
     ///
-    /// let lowercase = uuid_like.to_uuid_string(false);
+    /// let lowercase = uuid_like.to_uuid_string(Case::Lower);
     /// assert_eq!(lowercase, "cab1952a-f09d-86d9-928e-96ea03dc6af3");
     ///
-    /// let uppercase = uuid_like.to_uuid_string(true);
+    /// let uppercase = uuid_like.to_uuid_string(Case::Upper);
     /// assert_eq!(uppercase, "CAB1952A-F09D-86D9-928E-96EA03DC6AF3");
     /// ```
-    pub fn to_uuid_string(&self, uppercase: bool) -> String {
-        crate::utils::u128_to_uuid_string(self.0, uppercase)
+    pub fn to_uuid_string(&self, case: Case) -> String {
+        crate::utils::u128_to_uuid_string(self.0, case)
     }
 
     /// Parses a UUID hex string into a `UUIDLike`.
@@ -198,7 +219,7 @@ impl UUIDLike {
             } else if !byte.is_ascii_hexdigit() {
                 return Err(ParseUuidStringError::InvalidHexChar {
                     position: i,
-                    byte,
+                    character: byte as char,
                 });
             }
         }
@@ -210,7 +231,10 @@ impl UUIDLike {
             // Find the invalid character
             for (i, &byte) in bytes.get(0..8).unwrap_or(&[]).iter().enumerate() {
                 if !byte.is_ascii_hexdigit() {
-                    return ParseUuidStringError::InvalidHexChar { position: i, byte };
+                    return ParseUuidStringError::InvalidHexChar {
+                        position: i,
+                        character: byte as char,
+                    };
                 }
             }
             // Shouldn't reach here, but if we do just use WrongLength as a fallback
@@ -219,7 +243,10 @@ impl UUIDLike {
         let s2 = u16::from_str_radix(&uuid_string[9..13], 16).map_err(|_| {
             for (i, &byte) in bytes.get(9..13).unwrap_or(&[]).iter().enumerate() {
                 if !byte.is_ascii_hexdigit() {
-                    return ParseUuidStringError::InvalidHexChar { position: 9 + i, byte };
+                    return ParseUuidStringError::InvalidHexChar {
+                        position: 9 + i,
+                        character: byte as char,
+                    };
                 }
             }
             ParseUuidStringError::WrongLength(uuid_string.len())
@@ -227,7 +254,10 @@ impl UUIDLike {
         let s3 = u16::from_str_radix(&uuid_string[14..18], 16).map_err(|_| {
             for (i, &byte) in bytes.get(14..18).unwrap_or(&[]).iter().enumerate() {
                 if !byte.is_ascii_hexdigit() {
-                    return ParseUuidStringError::InvalidHexChar { position: 14 + i, byte };
+                    return ParseUuidStringError::InvalidHexChar {
+                        position: 14 + i,
+                        character: byte as char,
+                    };
                 }
             }
             ParseUuidStringError::WrongLength(uuid_string.len())
@@ -235,7 +265,10 @@ impl UUIDLike {
         let s4 = u16::from_str_radix(&uuid_string[19..23], 16).map_err(|_| {
             for (i, &byte) in bytes.get(19..23).unwrap_or(&[]).iter().enumerate() {
                 if !byte.is_ascii_hexdigit() {
-                    return ParseUuidStringError::InvalidHexChar { position: 19 + i, byte };
+                    return ParseUuidStringError::InvalidHexChar {
+                        position: 19 + i,
+                        character: byte as char,
+                    };
                 }
             }
             ParseUuidStringError::WrongLength(uuid_string.len())
@@ -243,7 +276,10 @@ impl UUIDLike {
         let s5 = u64::from_str_radix(&uuid_string[24..36], 16).map_err(|_| {
             for (i, &byte) in bytes.get(24..36).unwrap_or(&[]).iter().enumerate() {
                 if !byte.is_ascii_hexdigit() {
-                    return ParseUuidStringError::InvalidHexChar { position: 24 + i, byte };
+                    return ParseUuidStringError::InvalidHexChar {
+                        position: 24 + i,
+                        character: byte as char,
+                    };
                 }
             }
             ParseUuidStringError::WrongLength(uuid_string.len())
@@ -267,13 +303,13 @@ mod tests {
     #[test]
     fn parse_lowercase() {
         let result = UUIDLike::parse_uuid_string("ffffffff-ffff-ffff-ffff-ffffffffffff");
-        assert_eq!(result.unwrap().as_u128(), u128::MAX);
+        assert_eq!(result.expect("valid UUID").as_u128(), u128::MAX);
     }
 
     #[test]
     fn parse_uppercase() {
         let result = UUIDLike::parse_uuid_string("FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF");
-        assert_eq!(result.unwrap().as_u128(), u128::MAX);
+        assert_eq!(result.expect("valid UUID").as_u128(), u128::MAX);
     }
 
     #[test]
@@ -285,6 +321,6 @@ mod tests {
     #[test]
     fn parse_all_zeros() {
         let result = UUIDLike::parse_uuid_string("00000000-0000-0000-0000-000000000000");
-        assert_eq!(result.unwrap().as_u128(), 0);
+        assert_eq!(result.expect("valid UUID").as_u128(), 0);
     }
 }

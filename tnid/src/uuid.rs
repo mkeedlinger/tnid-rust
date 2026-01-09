@@ -23,7 +23,7 @@
 //! assert_eq!(tnid.as_u128(), tnid_back.as_u128());
 //! ```
 
-use crate::{TnidName, Tnid};
+use crate::{Tnid, TnidName};
 
 /// Error type for conversion from `uuid::Uuid` to `Tnid`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,7 +36,10 @@ impl std::fmt::Display for TnidFromUuidError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             TnidFromUuidError::InvalidTnid => {
-                write!(f, "UUID is not a valid Tnid (wrong version/variant or name mismatch)")
+                write!(
+                    f,
+                    "UUID is not a valid Tnid (wrong version/variant or name mismatch)"
+                )
             }
         }
     }
@@ -71,7 +74,7 @@ impl<Name: TnidName> TryFrom<uuid::Uuid> for Tnid<Name> {
 #[cfg(all(test, feature = "time", feature = "rand"))]
 mod tests {
     use super::*;
-    use crate::NameStr;
+    use crate::{Case, NameStr};
 
     // Test helper types
     struct TestId;
@@ -196,7 +199,7 @@ mod tests {
 
         // uuid crate produces lowercase hex by default
         let uuid_str = uuid.to_string();
-        let tnid_uuid_str = tnid.to_uuid_string(false);
+        let tnid_uuid_str = tnid.to_uuid_string(Case::Lower);
 
         assert_eq!(uuid_str, tnid_uuid_str);
     }
@@ -214,7 +217,10 @@ mod tests {
         // Should fail to convert to Tnid (wrong version)
         let result = Tnid::<TestId>::try_from(uuid_v4);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), TnidFromUuidError::InvalidTnid);
+        assert_eq!(
+            result.expect_err("wrong UUID version should be rejected"),
+            TnidFromUuidError::InvalidTnid
+        );
     }
 
     #[test]
@@ -226,7 +232,10 @@ mod tests {
         // Try to convert to Tnid with "test" name - should fail
         let result = Tnid::<TestId>::try_from(uuid);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), TnidFromUuidError::InvalidTnid);
+        assert_eq!(
+            result.expect_err("mismatched TNID name should be rejected"),
+            TnidFromUuidError::InvalidTnid
+        );
     }
 
     // Edge case tests
@@ -242,15 +251,13 @@ mod tests {
         // Test 4-character name
         let tnid_zzzz = Tnid::<Zzzz>::new_v0();
         let uuid_zzzz: uuid::Uuid = tnid_zzzz.into();
-        let tnid_zzzz_back: Tnid<Zzzz> =
-            uuid_zzzz.try_into().expect("4-char name should work");
+        let tnid_zzzz_back: Tnid<Zzzz> = uuid_zzzz.try_into().expect("4-char name should work");
         assert_eq!(tnid_zzzz.as_u128(), tnid_zzzz_back.as_u128());
 
         // Test 4-character name (UserId = "user")
         let tnid_user = Tnid::<UserId>::new_v0();
         let uuid_user: uuid::Uuid = tnid_user.into();
-        let tnid_user_back: Tnid<UserId> =
-            uuid_user.try_into().expect("4-char name should work");
+        let tnid_user_back: Tnid<UserId> = uuid_user.try_into().expect("4-char name should work");
         assert_eq!(tnid_user.as_u128(), tnid_user_back.as_u128());
     }
 

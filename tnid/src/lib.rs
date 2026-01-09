@@ -1,101 +1,4 @@
-//! # TNID
-//!
-//! **T**ype-checked, **N**amed **ID**s that are fully compatible with UUIDs.
-//!
-//! TNID ("Typed Named ID", pronounced "tee-nid") embeds a human-readable name directly into
-//! a UUID-compatible 128-bit identifier. Each TNID carries a 1-4 character type name (like
-//! "user" or "post") that's validated at compile time, preventing you from accidentally
-//! mixing up IDs for different entity types.
-//!
-//! # Quick Start
-//!
-//! ```rust
-//! use tnid::{Tnid, TnidName, NameStr};
-//!
-//! // Define a name type for your entity
-//! struct User;
-//! impl TnidName for User {
-//!     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
-//! }
-//!
-//! // Generate IDs
-//! let id = Tnid::<User>::new_v0();  // Time-ordered (like UUIDv7)
-//!
-//! // Display as a TNID string
-//! println!("{}", id);  // e.g., "user.Br2flcNDfF6LYICnT"
-//!
-//! // Or as a standard UUID for database storage
-//! let uuid_str = id.to_uuid_string(false);
-//! // e.g., "cab1952a-f09d-86d9-928e-96ea03dc6af3"
-//! ```
-//!
-//! # Why TNIDs?
-//!
-//! TNIDs solve several common problems with plain UUIDs:
-//!
-//! - **Type Safety**: `Tnid<User>` and `Tnid<Post>` are different types. You can't accidentally
-//!   pass a post ID where a user ID is expected.
-//! - **Human Readable**: The TNID string format (`user.Br2flcNDfF6LYICnT`) tells you at a
-//!   glance what kind of entity the ID refers to.
-//! - **UUID Compatible**: Every TNID is a valid UUIDv8, so it works with existing UUID columns
-//!   in databases and UUID-based APIs.
-//!
-//! # TNID Variants
-//!
-//! Like UUID versions, TNIDs come in different variants:
-//!
-//! - **V0** ([`Tnid::new_v0`]) - Time-ordered with millisecond precision (like UUIDv7).
-//!   Use when you want IDs to sort chronologically.
-//! - **V1** ([`Tnid::new_v1`]) - High-entropy random (like UUIDv4).
-//!   Use when you want maximum randomness without time information.
-//!
-//! See [`TnidVariant`] for details.
-//!
-//! # String Representations
-//!
-//! TNIDs support two string formats:
-//!
-//! - **TNID format** (`user.Br2flcNDfF6LYICnT`): Human-readable, sortable, unambiguous
-//! - **UUID format** (`cab1952a-f09d-86d9-928e-96ea03dc6af3`): Standard UUID hex for compatibility
-//!
-//! ```rust
-//! # use tnid::{Tnid, TnidName, NameStr};
-//! # struct User;
-//! # impl TnidName for User {
-//! #     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
-//! # }
-//! let id = Tnid::<User>::new_v1();
-//!
-//! // TNID string (for APIs, logs, user-facing contexts)
-//! let tnid_str = id.to_tnid_string();
-//!
-//! // UUID string (for databases, UUID-based systems)
-//! let uuid_str = id.to_uuid_string(false);
-//!
-//! // Parse back
-//! let from_tnid = Tnid::<User>::parse_tnid_string(&tnid_str);
-//! let from_uuid = Tnid::<User>::parse_uuid_string(&uuid_str);
-//! ```
-//!
-//! # Feature Flags
-//!
-//! | Feature | Default | Description |
-//! |---------|---------|-------------|
-//! | `time` | ✓ | Enables [`Tnid::new_v0`] with automatic timestamps |
-//! | `rand` | ✓ | Enables [`Tnid::new_v0`] and [`Tnid::new_v1`] with automatic randomness |
-//! | `encryption` | | Enables [`Tnid::encrypt_v0_to_v1`] and [`Tnid::decrypt_v1_to_v0`] for hiding timestamps |
-//! | `uuid` | | Integration with the [`uuid`](https://docs.rs/uuid) crate |
-//!
-//! Without the default features, you can still create TNIDs using explicit components:
-//! - [`Tnid::new_v0_with_parts`] - Provide your own timestamp and random bits
-//! - [`Tnid::new_v1_with_random`] - Provide your own random bits
-//!
-//! # Reliability
-//!
-//! This crate is designed to never panic in normal use. All functions that could potentially
-//! panic are fuzz tested with randomized inputs to verify they don't. Extensive unit tests
-//! verify correctness of encoding, sorting, and round-trip conversions.
-
+#![doc = include_str!("../README.md")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used)]
@@ -110,6 +13,14 @@ pub mod dynamic_tnid;
 #[cfg(feature = "encryption")]
 pub mod encryption;
 mod name_encoding;
+#[cfg(feature = "serde")]
+mod serde_impl;
+#[cfg(any(
+    feature = "sqlx-postgres",
+    feature = "sqlx-mysql",
+    feature = "sqlx-sqlite"
+))]
+mod sqlx_impl;
 mod tnid_variant;
 mod utils;
 #[cfg(feature = "uuid")]
@@ -122,6 +33,7 @@ pub use data_encoding::DataEncodingError;
 pub use dynamic_tnid::DynamicTnid;
 pub use name_encoding::{NameBitsValidation, NameError, NameStr};
 pub use tnid_variant::TnidVariant;
+pub use uuidlike::Case;
 pub use uuidlike::{ParseUuidStringError, UUIDLike};
 
 #[cfg(feature = "encryption")]
@@ -159,10 +71,16 @@ impl std::fmt::Display for ParseTnidError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidLength(len) => {
-                write!(f, "TNID string length {len} is invalid; expected 19-22 characters")
+                write!(
+                    f,
+                    "TNID string length {len} is invalid; expected 19-22 characters"
+                )
             }
             Self::MissingSeparator => {
-                write!(f, "TNID string missing dot separator; expected format: <name>.<data>")
+                write!(
+                    f,
+                    "TNID string missing dot separator; expected format: <name>.<data>"
+                )
             }
             Self::InvalidName(e) => write!(f, "invalid TNID name: {e}"),
             Self::NameMismatch { expected, found } => {
@@ -335,6 +253,7 @@ impl<Name: TnidName> Tnid<Name> {
     /// will sort before those created later in all representations (u128, UUID hex, TNID string).
     ///
     /// Use this when you need time-based sorting, similar to choosing UUIDv7 over UUIDv4.
+    #[cfg(all(feature = "time", feature = "rand"))]
     pub fn new_time_ordered() -> Self {
         Self::new_v0()
     }
@@ -347,7 +266,7 @@ impl<Name: TnidName> Tnid<Name> {
     ///
     /// Use this when you need time-based sorting and want IDs to be roughly chronological,
     /// similar to choosing UUIDv7 over UUIDv4.
-    #[cfg(feature = "time")]
+    #[cfg(all(feature = "time", feature = "rand"))]
     pub fn new_v0() -> Self {
         Self::new_v0_with_time(time::OffsetDateTime::now_utc())
     }
@@ -590,7 +509,7 @@ impl<Name: TnidName> Tnid<Name> {
     ///
     /// # Parameters
     ///
-    /// - `uppercase`: If `true`, uses uppercase hex digits (A-F). If `false`, uses lowercase (a-f).
+    /// - `case`: Whether to use uppercase (`A-F`) or lowercase (`a-f`) hex digits.
     ///
     /// # Examples
     ///
@@ -604,14 +523,16 @@ impl<Name: TnidName> Tnid<Name> {
     ///
     /// let id = Tnid::<User>::new_v1();
     ///
-    /// let uuid_lower = id.to_uuid_string(false);
+    /// use tnid::Case;
+    ///
+    /// let uuid_lower = id.to_uuid_string(Case::Lower);
     /// // "cab1952a-f09d-86d9-928e-96ea03dc6af3"
     ///
-    /// let uuid_upper = id.to_uuid_string(true);
+    /// let uuid_upper = id.to_uuid_string(Case::Upper);
     /// // "CAB1952A-F09D-86D9-928E-96EA03DC6AF3"
     /// ```
-    pub fn to_uuid_string(&self, uppercase: bool) -> String {
-        utils::u128_to_uuid_string(self.id, uppercase)
+    pub fn to_uuid_string(&self, case: Case) -> String {
+        utils::u128_to_uuid_string(self.id, case)
     }
 
     /// Parses a TNID from UUID hex string format.
@@ -620,7 +541,7 @@ impl<Name: TnidName> Tnid<Name> {
     ///
     /// The parser accepts both uppercase and lowercase hex digits (A-F or a-f).
     ///
-    /// Returns `None` if:
+    /// Returns `Err` if:
     /// - The string is not valid UUID format
     /// - The UUID is not a valid TNID (wrong version/variant bits or name mismatch)
     ///
@@ -638,7 +559,9 @@ impl<Name: TnidName> Tnid<Name> {
     ///
     /// // Create a TNID and convert to UUID string
     /// let original = Tnid::<User>::new_v1();
-    /// let uuid_string = original.to_uuid_string(false);
+    /// use tnid::Case;
+    ///
+    /// let uuid_string = original.to_uuid_string(Case::Lower);
     ///
     /// // Parse it back
     /// let parsed = Tnid::<User>::parse_uuid_string(&uuid_string);
@@ -646,7 +569,7 @@ impl<Name: TnidName> Tnid<Name> {
     /// assert_eq!(parsed.unwrap().as_u128(), original.as_u128());
     ///
     /// // Also accepts uppercase
-    /// let uuid_upper = original.to_uuid_string(true);
+    /// let uuid_upper = original.to_uuid_string(Case::Upper);
     /// let parsed_upper = Tnid::<User>::parse_uuid_string(&uuid_upper);
     /// assert!(parsed_upper.is_ok());
     ///
@@ -697,8 +620,10 @@ impl<Name: TnidName> Tnid<Name> {
     /// ```
     pub fn parse_tnid_string(tnid_string: &str) -> Result<Self, ParseTnidError> {
         // Quick length check - valid TNIDs are 19-22 chars (name 1-4 + '.' + data 17)
-        const MIN_LEN: usize = name_encoding::NAME_MIN_CHARS + 1 + data_encoding::DATA_CHAR_ENCODING_LEN as usize;
-        const MAX_LEN: usize = name_encoding::NAME_MAX_CHARS + 1 + data_encoding::DATA_CHAR_ENCODING_LEN as usize;
+        const MIN_LEN: usize =
+            name_encoding::NAME_MIN_CHARS + 1 + data_encoding::DATA_CHAR_ENCODING_LEN as usize;
+        const MAX_LEN: usize =
+            name_encoding::NAME_MAX_CHARS + 1 + data_encoding::DATA_CHAR_ENCODING_LEN as usize;
 
         if tnid_string.len() < MIN_LEN || tnid_string.len() > MAX_LEN {
             return Err(ParseTnidError::InvalidLength(tnid_string.len()));
@@ -761,8 +686,8 @@ impl<Name: TnidName> Tnid<Name> {
         let expected_name_bits = name_encoding::name_mask(Name::ID_NAME);
         if actual_name_bits != expected_name_bits {
             // Extract the actual name string for error reporting
-            let found = name_encoding::extract_name_string(id)
-                .ok_or(ParseTnidError::InvalidNameBits)?;
+            let found =
+                name_encoding::extract_name_string(id).ok_or(ParseTnidError::InvalidNameBits)?;
             return Err(ParseTnidError::NameMismatch {
                 expected: Name::ID_NAME.as_str(),
                 found,
@@ -813,7 +738,10 @@ impl<Name: TnidName> Tnid<Name> {
     /// assert_eq!(decrypted.as_u128(), original.as_u128());
     /// ```
     #[cfg(feature = "encryption")]
-    pub fn encrypt_v0_to_v1(&self, key: impl Into<encryption::EncryptionKey>) -> Result<Self, encryption::EncryptionError> {
+    pub fn encrypt_v0_to_v1(
+        &self,
+        key: impl Into<encryption::EncryptionKey>,
+    ) -> Result<Self, encryption::EncryptionError> {
         let id = encryption::encrypt_id_v0_to_v1(self.id, &key.into())?;
 
         Ok(Self {
@@ -857,7 +785,10 @@ impl<Name: TnidName> Tnid<Name> {
     /// assert_eq!(decrypted.as_u128(), original.as_u128());
     /// ```
     #[cfg(feature = "encryption")]
-    pub fn decrypt_v1_to_v0(&self, key: impl Into<encryption::EncryptionKey>) -> Result<Self, encryption::EncryptionError> {
+    pub fn decrypt_v1_to_v0(
+        &self,
+        key: impl Into<encryption::EncryptionKey>,
+    ) -> Result<Self, encryption::EncryptionError> {
         let id = encryption::decrypt_id_v1_to_v0(self.id, &key.into())?;
 
         Ok(Self {
@@ -890,14 +821,14 @@ mod tests {
 
     #[test]
     fn variant0_is_k_sortable() {
-        use time::Duration;
+        let mut epoch_ms: u64 = 1_700_000_000_000;
+        let random: u64 = 42;
 
-        let mut test_time = time::OffsetDateTime::now_utc();
-        let mut last_id: Tnid<TestId> = Tnid::new_v0_with_time(test_time);
+        let mut last_id: Tnid<TestId> = Tnid::new_v0_with_parts(epoch_ms, random);
 
         for _ in 1..10_000 {
-            test_time += Duration::milliseconds(1);
-            let id: Tnid<TestId> = Tnid::new_v0_with_time(test_time);
+            epoch_ms += 1;
+            let id: Tnid<TestId> = Tnid::new_v0_with_parts(epoch_ms, random);
 
             assert!(last_id.as_u128() < id.as_u128());
             assert!(last_id.to_tnid_string() < id.to_tnid_string());
@@ -908,7 +839,7 @@ mod tests {
 
     #[test]
     fn tnid_variant_returns_v0() {
-        let id: Tnid<TestId> = Tnid::new_v0();
+        let id: Tnid<TestId> = Tnid::new_v0_with_parts(1_700_000_000_000, 42);
         assert_eq!(id.variant(), TnidVariant::V0);
     }
 
@@ -917,15 +848,20 @@ mod tests {
     fn encryption_bidirectional() {
         let secret = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
 
-        let original: Tnid<TestId> = Tnid::new_v0();
+        // Use the featureless constructor so this test doesn't require `time`/`rand`.
+        let original: Tnid<TestId> = Tnid::new_v0_with_parts(1_700_000_000_000, 42);
         assert_eq!(original.variant(), TnidVariant::V0);
 
-        let encrypted = original.encrypt_v0_to_v1(secret).unwrap();
+        let encrypted = original
+            .encrypt_v0_to_v1(secret)
+            .expect("encryption should succeed");
         assert_eq!(encrypted.variant(), TnidVariant::V1);
 
         dbg!(encrypted, original);
 
-        let decrypted = encrypted.decrypt_v1_to_v0(secret).unwrap();
+        let decrypted = encrypted
+            .decrypt_v1_to_v0(secret)
+            .expect("decryption should succeed");
         assert_eq!(decrypted.variant(), TnidVariant::V0);
 
         assert_eq!(decrypted.as_u128(), original.as_u128());
@@ -933,9 +869,10 @@ mod tests {
 
     #[test]
     fn parse_tnid_string_roundtrip() {
-        let original: Tnid<TestId> = Tnid::new_v0();
+        let original: Tnid<TestId> = Tnid::new_v0_with_parts(1_700_000_000_000, 42);
         let tnid_string = original.to_tnid_string();
-        let parsed = Tnid::<TestId>::parse_tnid_string(&tnid_string).unwrap();
+        let parsed = Tnid::<TestId>::parse_tnid_string(&tnid_string)
+            .expect("generated TNID string should parse");
         assert_eq!(parsed.as_u128(), original.as_u128());
     }
 

@@ -43,8 +43,6 @@ pub fn make_from_parts(name: NameStr, epoch_millis: u64, random: u64) -> u128 {
 
 #[cfg(test)]
 mod tests {
-    use std::u64;
-
     use super::*;
 
     #[test]
@@ -57,7 +55,7 @@ mod tests {
 
     #[test]
     fn name_mask_correct_location() {
-        let name = NameStr::new("zzzz").unwrap();
+        let name = NameStr::new("zzzz").expect("valid name");
         let mask = name_encoding::name_mask(name);
 
         assert_eq!(mask.leading_zeros(), 0);
@@ -69,7 +67,7 @@ mod tests {
     #[test]
     fn name_map_sorts() {
         let mut entries = name_encoding::CHAR_MAPPING.iter();
-        let mut last = entries.next().unwrap();
+        let mut last = entries.next().expect("mapping is non-empty");
 
         for next in entries {
             assert!(last.0 < next.0);

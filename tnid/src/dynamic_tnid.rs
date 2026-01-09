@@ -34,7 +34,10 @@
 
 #[cfg(feature = "encryption")]
 use crate::encryption::EncryptionKey;
-use crate::{data_encoding, name_encoding, utils, v0, v1, NameStr, Tnid, TnidName, TnidVariant, UUIDLike};
+use crate::{
+    Case, NameStr, Tnid, TnidName, TnidVariant, UUIDLike, data_encoding, name_encoding, utils, v0,
+    v1,
+};
 #[cfg(feature = "time")]
 use time::OffsetDateTime;
 
@@ -211,7 +214,7 @@ impl DynamicTnid {
     /// databases that store UUIDs as u128/binary, interoperating with UUID-based systems,
     /// or deserializing.
     ///
-    /// Returns `None` if the value is not a valid TNID. Validation includes:
+    /// Returns `Err` if the value is not a valid TNID. Validation includes:
     /// - Correct UUIDv8 version and variant bits
     /// - Valid name encoding (1-4 characters, properly encoded)
     ///
@@ -247,7 +250,7 @@ impl DynamicTnid {
     ///
     /// This is the inverse of [`Self::to_tnid_string`].
     ///
-    /// Returns `None` if the string is invalid. Validation includes:
+    /// Returns `Err` if the string is invalid. Validation includes:
     /// - Correct format (`<name>.<encoded-data>`)
     /// - Valid name (1-4 characters, from allowed character set)
     /// - Valid TNID Data Encoding
@@ -267,15 +270,19 @@ impl DynamicTnid {
     /// ```
     pub fn parse_tnid_string(s: &str) -> Result<Self, crate::ParseTnidError> {
         // Quick length check - valid TNIDs are 19-22 chars (name 1-4 + '.' + data 17)
-        const MIN_LEN: usize = name_encoding::NAME_MIN_CHARS + 1 + data_encoding::DATA_CHAR_ENCODING_LEN as usize;
-        const MAX_LEN: usize = name_encoding::NAME_MAX_CHARS + 1 + data_encoding::DATA_CHAR_ENCODING_LEN as usize;
+        const MIN_LEN: usize =
+            name_encoding::NAME_MIN_CHARS + 1 + data_encoding::DATA_CHAR_ENCODING_LEN as usize;
+        const MAX_LEN: usize =
+            name_encoding::NAME_MAX_CHARS + 1 + data_encoding::DATA_CHAR_ENCODING_LEN as usize;
 
         if s.len() < MIN_LEN || s.len() > MAX_LEN {
             return Err(crate::ParseTnidError::InvalidLength(s.len()));
         }
 
         // Split on dot separator
-        let (name_str, data_str) = s.split_once('.').ok_or(crate::ParseTnidError::MissingSeparator)?;
+        let (name_str, data_str) = s
+            .split_once('.')
+            .ok_or(crate::ParseTnidError::MissingSeparator)?;
 
         // Validate name is valid
         let name = NameStr::new(name_str).map_err(crate::ParseTnidError::InvalidName)?;
@@ -302,7 +309,7 @@ impl DynamicTnid {
     ///
     /// The parser accepts both uppercase and lowercase hex digits (A-F or a-f).
     ///
-    /// Returns `None` if:
+    /// Returns `Err` if:
     /// - The string is not a valid UUID format
     /// - The UUID is not a valid TNID (wrong version/variant bits or invalid name encoding)
     ///
@@ -314,14 +321,16 @@ impl DynamicTnid {
     /// // Create a TNID and convert to UUID string
     /// let name = NameStr::new("user").unwrap();
     /// let original = DynamicTnid::new_v1(name);
-    /// let uuid_string = original.to_uuid_string(false);
+    /// use tnid::Case;
+    ///
+    /// let uuid_string = original.to_uuid_string(Case::Lower);
     ///
     /// // Parse it back
     /// let parsed = DynamicTnid::parse_uuid_string(&uuid_string).unwrap();
     /// assert_eq!(parsed.as_u128(), original.as_u128());
     ///
     /// // Also accepts uppercase
-    /// let uuid_upper = original.to_uuid_string(true);
+    /// let uuid_upper = original.to_uuid_string(Case::Upper);
     /// let parsed_upper = DynamicTnid::parse_uuid_string(&uuid_upper).unwrap();
     ///
     /// // Invalid: not a valid UUID format
@@ -424,7 +433,11 @@ impl DynamicTnid {
     /// assert!(tnid_string.starts_with("user."));
     /// ```
     pub fn to_tnid_string(&self) -> String {
-        format!("{}.{}", self.name(), data_encoding::id_data_to_string(self.0))
+        format!(
+            "{}.{}",
+            self.name(),
+            data_encoding::id_data_to_string(self.0)
+        )
     }
 
     /// Converts the TNID to UUID hex string format.
@@ -440,14 +453,16 @@ impl DynamicTnid {
     /// let name = NameStr::new("user").unwrap();
     /// let id = DynamicTnid::new_v1(name);
     ///
-    /// let uuid_lower = id.to_uuid_string(false);
+    /// use tnid::Case;
+    ///
+    /// let uuid_lower = id.to_uuid_string(Case::Lower);
     /// // "cab1952a-f09d-86d9-928e-96ea03dc6af3"
     ///
-    /// let uuid_upper = id.to_uuid_string(true);
+    /// let uuid_upper = id.to_uuid_string(Case::Upper);
     /// // "CAB1952A-F09D-86D9-928E-96EA03DC6AF3"
     /// ```
-    pub fn to_uuid_string(&self, uppercase: bool) -> String {
-        utils::u128_to_uuid_string(self.0, uppercase)
+    pub fn to_uuid_string(&self, case: Case) -> String {
+        utils::u128_to_uuid_string(self.0, case)
     }
 
     /// Converts the TNID to its 16-byte big-endian representation.
@@ -474,7 +489,7 @@ impl DynamicTnid {
     /// This is the inverse of [`Self::to_bytes`] and validates that the bytes represent
     /// a valid TNID.
     ///
-    /// Returns `None` if the bytes don't represent a valid TNID (invalid UUID version/variant
+    /// Returns `Err` if the bytes don't represent a valid TNID (invalid UUID version/variant
     /// bits or invalid name encoding).
     ///
     /// # Examples
@@ -493,14 +508,26 @@ impl DynamicTnid {
         Self::from_u128(u128::from_be_bytes(bytes))
     }
 
+    /// Encrypts a V0 TNID to a V1 TNID, hiding timestamp information.
+    ///
+    /// See [`crate::Tnid::encrypt_v0_to_v1`] for details on behavior and invariants.
     #[cfg(feature = "encryption")]
-    pub fn encrypt_v0_to_v1(&self, key: impl Into<EncryptionKey>) -> Result<Self, crate::EncryptionError> {
+    pub fn encrypt_v0_to_v1(
+        &self,
+        key: impl Into<EncryptionKey>,
+    ) -> Result<Self, crate::EncryptionError> {
         let id = crate::encryption::encrypt_id_v0_to_v1(self.0, &key.into())?;
         Ok(Self(id))
     }
 
+    /// Decrypts a V1 TNID back to a V0 TNID, recovering timestamp information.
+    ///
+    /// See [`crate::Tnid::decrypt_v1_to_v0`] for details on behavior and invariants.
     #[cfg(feature = "encryption")]
-    pub fn decrypt_v1_to_v0(&self, key: impl Into<EncryptionKey>) -> Result<Self, crate::EncryptionError> {
+    pub fn decrypt_v1_to_v0(
+        &self,
+        key: impl Into<EncryptionKey>,
+    ) -> Result<Self, crate::EncryptionError> {
         let id = crate::encryption::decrypt_id_v1_to_v0(self.0, &key.into())?;
         Ok(Self(id))
     }
