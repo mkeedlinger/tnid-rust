@@ -23,29 +23,7 @@
 //! assert_eq!(tnid.as_u128(), tnid_back.as_u128());
 //! ```
 
-use crate::{Tnid, TnidName};
-
-/// Error type for conversion from `uuid::Uuid` to `Tnid`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TnidFromUuidError {
-    /// The UUID is not a valid Tnid (wrong version/variant or name encoding doesn't match).
-    InvalidTnid,
-}
-
-impl std::fmt::Display for TnidFromUuidError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TnidFromUuidError::InvalidTnid => {
-                write!(
-                    f,
-                    "UUID is not a valid Tnid (wrong version/variant or name mismatch)"
-                )
-            }
-        }
-    }
-}
-
-impl std::error::Error for TnidFromUuidError {}
+use crate::{ParseTnidError, Tnid, TnidName};
 
 /// Convert a Tnid to a `uuid::Uuid`.
 ///
@@ -63,11 +41,10 @@ impl<Name: TnidName> From<Tnid<Name>> for uuid::Uuid {
 /// - The UUID must have the correct variant bits (RFC4122)
 /// - The name encoding in the top 20 bits must match the expected Tnid name type
 impl<Name: TnidName> TryFrom<uuid::Uuid> for Tnid<Name> {
-    type Error = TnidFromUuidError;
+    type Error = ParseTnidError;
 
     fn try_from(uuid: uuid::Uuid) -> Result<Self, Self::Error> {
-        let u128_val = uuid.as_u128();
-        Tnid::<Name>::from_u128(u128_val).map_err(|_| TnidFromUuidError::InvalidTnid)
+        Tnid::<Name>::from_u128(uuid.as_u128())
     }
 }
 
@@ -219,7 +196,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.expect_err("wrong UUID version should be rejected"),
-            TnidFromUuidError::InvalidTnid
+            ParseTnidError::InvalidUuidBits
         );
     }
 
@@ -232,10 +209,10 @@ mod tests {
         // Try to convert to Tnid with "test" name - should fail
         let result = Tnid::<TestId>::try_from(uuid);
         assert!(result.is_err());
-        assert_eq!(
+        assert!(matches!(
             result.expect_err("mismatched TNID name should be rejected"),
-            TnidFromUuidError::InvalidTnid
-        );
+            ParseTnidError::NameMismatch { .. }
+        ));
     }
 
     // Edge case tests

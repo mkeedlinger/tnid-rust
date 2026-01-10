@@ -36,11 +36,9 @@ pub use tnid_variant::TnidVariant;
 pub use uuidlike::Case;
 pub use uuidlike::{ParseUuidStringError, UUIDLike};
 
-#[cfg(feature = "encryption")]
-pub use encryption::{EncryptionError, EncryptionKeyError};
-
 /// Error when parsing a TNID from a string or u128.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ParseTnidError {
     /// The TNID string has an invalid length (TNID string parsing only).
     /// Contains the actual length (expected 19-22 characters).
@@ -355,6 +353,21 @@ impl<Name: TnidName> Tnid<Name> {
     ///
     /// TNIDs created with earlier timestamps will sort before those with later timestamps
     /// in all representations (u128, UUID hex, and TNID string).
+    ///
+    /// # Timestamp Range
+    ///
+    /// The timestamp field uses 43 bits to store milliseconds since the Unix epoch, which
+    /// means TNIDv0 IDs can only represent times between 1970-01-01 and approximately
+    /// the year 2248. Times outside this range will **wrap around**:
+    ///
+    /// - **Pre-epoch times** (before 1970-01-01): The negative milliseconds value wraps
+    ///   to a large positive value, resulting in a timestamp that appears far in the future.
+    /// - **Post-2248 times**: The milliseconds value overflows and wraps around, resulting
+    ///   in a timestamp that appears in the past.
+    ///
+    /// This wrapping behavior is intentional and matches the spec's guidance for post-2248
+    /// overflow. If your application requires pre-epoch timestamps, consider using a
+    /// different ID scheme or storing the timestamp separately.
     ///
     /// # Examples
     ///
@@ -680,14 +693,20 @@ impl<Name: TnidName> Tnid<Name> {
             return Err(ParseTnidError::InvalidUuidBits);
         }
 
+        // Validate name bits are well-formed before checking for match
+        if name_encoding::validate_name_bits(id) == name_encoding::NameBitsValidation::Invalid {
+            return Err(ParseTnidError::InvalidNameBits);
+        }
+
         // check name encoding matches expected name
         let name_bits_mask = 0xFFFFF_u128 << 108; // top 20 bits
         let actual_name_bits = id & name_bits_mask;
         let expected_name_bits = name_encoding::name_mask(Name::ID_NAME);
         if actual_name_bits != expected_name_bits {
             // Extract the actual name string for error reporting
-            let found =
-                name_encoding::extract_name_string(id).ok_or(ParseTnidError::InvalidNameBits)?;
+            // This should always succeed since we validated the bits above
+            let found = name_encoding::extract_name_string(id)
+                .expect("name bits validated, extraction should succeed");
             return Err(ParseTnidError::NameMismatch {
                 expected: Name::ID_NAME.as_str(),
                 found,
@@ -886,5 +905,102 @@ mod tests {
     fn parse_tnid_string_no_separator() {
         let result = Tnid::<TestId>::parse_tnid_string("testabc123xyz");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn from_u128_malformed_name_bits_returns_invalid_name_bits() {
+        // Construct a u128 with malformed name bits: non-null after null
+        // Name encoding: each char is 5 bits in top 20 bits (bits 127-108)
+        // Pattern: [a, 0, b, c] where a=6, 0=null, b=7, c=8
+        // This is invalid because there's a non-null after a null
+        let a: u128 = 6; // 'a' encoding
+        let b: u128 = 7; // 'b' encoding
+        let c: u128 = 8; // 'c' encoding
+
+        // Build name bits: [a, 0, b, c] from high to low
+        // Bit positions: char0 at bits 127-123, char1 at 122-118, char2 at 117-113, char3 at 112-108
+        // Note: char1 is 0 (null), so we omit it from the OR expression
+        let name_bits = (a << 123) | (b << 113) | (c << 108);
+
+        // Add valid UUIDv8 bits
+        let id = name_bits | utils::UUID_V8_MASK;
+
+        let result = Tnid::<TestId>::from_u128(id);
+        assert!(
+            matches!(result, Err(ParseTnidError::InvalidNameBits)),
+            "expected InvalidNameBits, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn from_u128_name_mismatch_returns_name_mismatch() {
+        // Construct a u128 with well-formed name bits that don't match TestId ("test")
+        // Use name "user" which encodes as: u=26, s=24, e=10, r=23
+        let u: u128 = 26; // 'u' encoding
+        let s: u128 = 24; // 's' encoding
+        let e: u128 = 10; // 'e' encoding
+        let r: u128 = 23; // 'r' encoding
+
+        // Build name bits for "user"
+        let name_bits = (u << 123) | (s << 118) | (e << 113) | (r << 108);
+
+        // Add valid UUIDv8 bits
+        let id = name_bits | utils::UUID_V8_MASK;
+
+        let result = Tnid::<TestId>::from_u128(id);
+        match result {
+            Err(ParseTnidError::NameMismatch { expected, found }) => {
+                assert_eq!(expected, "test");
+                assert_eq!(found, "user");
+            }
+            other => panic!("expected NameMismatch, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn from_u128_empty_name_bits_returns_invalid_name_bits() {
+        // Construct a u128 with empty name bits (all nulls in name area)
+        // This is invalid because names must have at least 1 character
+        let name_bits: u128 = 0; // All zeros = all nulls
+
+        // Add valid UUIDv8 bits
+        let id = name_bits | utils::UUID_V8_MASK;
+
+        let result = Tnid::<TestId>::from_u128(id);
+        assert!(
+            matches!(result, Err(ParseTnidError::InvalidNameBits)),
+            "expected InvalidNameBits, got {:?}",
+            result
+        );
+    }
+
+    #[cfg(all(feature = "time", feature = "rand"))]
+    #[test]
+    fn new_v0_with_time_pre_epoch_wraps() {
+        use time::OffsetDateTime;
+
+        // A date before the Unix epoch (1969-07-20, Apollo 11 landing)
+        // -14182980 seconds = July 20, 1969 20:17:00 UTC
+        let pre_epoch =
+            OffsetDateTime::from_unix_timestamp(-14182980).expect("valid unix timestamp");
+
+        // This should not panic - it wraps the negative value
+        let id: Tnid<TestId> = Tnid::new_v0_with_time(pre_epoch);
+
+        // The ID should be valid and have the correct name
+        assert_eq!(id.name(), "test");
+
+        // The wrapped timestamp will produce a large value, making this ID
+        // sort after IDs with normal timestamps (this is the documented behavior)
+        let normal_time =
+            OffsetDateTime::from_unix_timestamp(1704067200).expect("valid unix timestamp"); // 2024-01-01
+        let normal_id: Tnid<TestId> = Tnid::new_v0_with_time(normal_time);
+
+        // Pre-epoch wraps to a large positive value, so it sorts AFTER normal times
+        assert!(
+            id.as_u128() > normal_id.as_u128(),
+            "pre-epoch ID should sort after normal ID due to wrapping"
+        );
     }
 }

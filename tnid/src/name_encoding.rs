@@ -124,6 +124,7 @@ pub const CHAR_MAPPING: [(u8, u8); 31] = [
 
 /// Error when creating a [`NameStr`] from a string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum NameError {
     /// The name string is empty (must be at least 1 character).
     Empty,
@@ -186,8 +187,8 @@ impl<'a> NameStr<'a> {
     /// in a const context (like defining a [`TnidName`](crate::TnidName) implementation),
     /// the panic will occur at compile time. If used at runtime, it will panic the program.
     ///
-    /// **Prefer using [`new()`](Self::new) for runtime validation** which returns an `Option`
-    /// instead of panicking.
+    /// **Prefer using [`new()`](Self::new) for runtime validation** which returns a
+    /// `Result<NameStr, NameError>` instead of panicking.
     ///
     /// # Panics
     ///
@@ -208,9 +209,9 @@ impl<'a> NameStr<'a> {
     /// }
     /// ```
     ///
-    /// This will fail to compile:
+    /// This will fail to compile because "INVALID" contains uppercase letters:
     /// ```compile_fail
-    /// use tnid::{NameStr, TNIDName, TNID};
+    /// use tnid::{NameStr, TnidName};
     ///
     /// struct Invalid;
     /// impl TnidName for Invalid {

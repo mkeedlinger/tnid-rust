@@ -38,8 +38,6 @@ use crate::{
     Case, NameStr, Tnid, TnidName, TnidVariant, UUIDLike, data_encoding, name_encoding, utils, v0,
     v1,
 };
-#[cfg(feature = "time")]
-use time::OffsetDateTime;
 
 /// A TNID with runtime-determined name.
 ///
@@ -112,6 +110,16 @@ impl DynamicTnid {
     /// or when you want IDs to reflect a specific point in time. The remaining bits are
     /// filled with random data.
     ///
+    /// # Timestamp Range
+    ///
+    /// The timestamp field uses 43 bits to store milliseconds since the Unix epoch. Times
+    /// outside the representable range (1970-01-01 to ~2248) will **wrap around**:
+    ///
+    /// - **Pre-epoch times** (before 1970-01-01): Wrap to appear as far-future timestamps.
+    /// - **Post-2248 times**: Wrap to appear as past timestamps.
+    ///
+    /// See [`Tnid::new_v0_with_time`](crate::Tnid::new_v0_with_time) for more details.
+    ///
     /// # Examples
     ///
     /// ```rust
@@ -123,7 +131,7 @@ impl DynamicTnid {
     /// let id = DynamicTnid::new_v0_with_time(name, now);
     /// ```
     #[cfg(all(feature = "time", feature = "rand"))]
-    pub fn new_v0_with_time(name: NameStr, time: OffsetDateTime) -> Self {
+    pub fn new_v0_with_time(name: NameStr, time: time::OffsetDateTime) -> Self {
         let epoch_millis = (time.unix_timestamp_nanos() / 1000 / 1000) as u64;
         let random_bits: u64 = rand::random();
         Self(v0::make_from_parts(name, epoch_millis, random_bits))
@@ -515,7 +523,7 @@ impl DynamicTnid {
     pub fn encrypt_v0_to_v1(
         &self,
         key: impl Into<EncryptionKey>,
-    ) -> Result<Self, crate::EncryptionError> {
+    ) -> Result<Self, crate::encryption::EncryptionError> {
         let id = crate::encryption::encrypt_id_v0_to_v1(self.0, &key.into())?;
         Ok(Self(id))
     }
@@ -527,7 +535,7 @@ impl DynamicTnid {
     pub fn decrypt_v1_to_v0(
         &self,
         key: impl Into<EncryptionKey>,
-    ) -> Result<Self, crate::EncryptionError> {
+    ) -> Result<Self, crate::encryption::EncryptionError> {
         let id = crate::encryption::decrypt_id_v1_to_v0(self.0, &key.into())?;
         Ok(Self(id))
     }

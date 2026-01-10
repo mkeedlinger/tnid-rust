@@ -63,6 +63,7 @@ use crate::{TnidVariant, utils};
 
 /// Error when creating an [`EncryptionKey`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum EncryptionKeyError {
     /// The hex string is not 32 characters long.
     /// Contains the actual length.
@@ -110,6 +111,7 @@ impl std::error::Error for EncryptionKeyError {}
 
 /// Error when encrypting or decrypting a TNID.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum EncryptionError {
     /// The TNID variant is not supported for encryption/decryption.
     /// Contains the unsupported variant.
@@ -154,7 +156,7 @@ impl std::error::Error for EncryptionError {}
 /// let bytes: &[u8] = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
 /// let key = EncryptionKey::from_slice(bytes).unwrap();
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct EncryptionKey([u8; 16]);
 
 impl EncryptionKey {
@@ -197,14 +199,16 @@ impl EncryptionKey {
             let high_char = high_byte as char;
             let low_char = low_byte as char;
 
-            let high = hex_char_to_nibble(high_byte).ok_or(EncryptionKeyError::InvalidHexChar {
-                position: pos,
-                character: high_char,
-            })?;
-            let low = hex_char_to_nibble(low_byte).ok_or(EncryptionKeyError::InvalidHexChar {
-                position: pos + 1,
-                character: low_char,
-            })?;
+            let high =
+                utils::hex_char_to_nibble(high_byte).ok_or(EncryptionKeyError::InvalidHexChar {
+                    position: pos,
+                    character: high_char,
+                })?;
+            let low =
+                utils::hex_char_to_nibble(low_byte).ok_or(EncryptionKeyError::InvalidHexChar {
+                    position: pos + 1,
+                    character: low_char,
+                })?;
 
             let byte_slot = bytes
                 .get_mut(i)
@@ -246,15 +250,6 @@ impl EncryptionKey {
 impl From<[u8; 16]> for EncryptionKey {
     fn from(bytes: [u8; 16]) -> Self {
         Self::new(bytes)
-    }
-}
-
-fn hex_char_to_nibble(c: u8) -> Option<u8> {
-    match c {
-        b'0'..=b'9' => Some(c - b'0'),
-        b'a'..=b'f' => Some(c - b'a' + 10),
-        b'A'..=b'F' => Some(c - b'A' + 10),
-        _ => None,
     }
 }
 

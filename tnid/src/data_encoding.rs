@@ -87,6 +87,7 @@ pub const CHAR_MAPPING: [(u8, u8); ENCODING_CHAR_NUM as usize] = [
 /// Note: This error type is generally not used directly, but is exposed through
 /// [`ParseTnidError::InvalidDataEncoding`](crate::ParseTnidError::InvalidDataEncoding).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DataEncodingError {
     /// The data string has wrong length.
     /// Contains the actual length (expected is 17).
