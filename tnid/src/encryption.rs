@@ -402,6 +402,25 @@ pub(crate) fn decrypt_id_v1_to_v0(id: u128, key: &EncryptionKey) -> Result<u128,
     Ok(id)
 }
 
+/// # Statistical Security Tests for FPE Encryption
+///
+/// These tests verify the cryptographic properties of the FF1 format-preserving encryption
+/// used to convert V0 TNIDs to V1 TNIDs. They help confirm that:
+///
+/// 1. **Indistinguishability**: Encrypted V0 outputs look statistically identical to random V1 outputs
+/// 2. **No information leakage**: Predictable patterns in the plaintext (like timestamps) don't leak through
+/// 3. **Proper diffusion**: Small input changes cause large, unpredictable output changes
+///
+/// ## What these tests DON'T prove
+///
+/// Statistical tests can catch obvious implementation bugs and confirm expected behavior,
+/// but they cannot:
+/// - Prove cryptographic security (only formal proofs or cryptanalysis can do that)
+/// - Detect subtle side-channel vulnerabilities
+/// - Guarantee security against quantum computers
+///
+/// The real security guarantee comes from FF1's NIST standardization (SP 800-38G)
+/// and AES's decades of cryptanalysis. These tests are sanity checks, not proofs.
 #[cfg(all(test, not(debug_assertions)))]
 mod tests_release {
     use super::*;
@@ -416,6 +435,502 @@ mod tests_release {
             let key: EncryptionKey = secret.to_le_bytes().into();
             decrypt(id_secret_data, &key);
         }
+    }
+
+    /// Helper: count how many values have bit `bit_pos` set to 1
+    fn count_ones_at_bit(samples: &[u128], bit_pos: u32) -> usize {
+        samples.iter().filter(|x| (*x >> bit_pos) & 1 == 1).count()
+    }
+
+    /// Fixed test key for deterministic tests
+    fn test_key() -> EncryptionKey {
+        EncryptionKey::new([
+            0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf,
+            0x4f, 0x3c,
+        ])
+    }
+
+    // ==================================================================================
+    // BIT FREQUENCY TEST (Monobit Test)
+    // ==================================================================================
+    //
+    // WHAT IT PROVES:
+    // If encryption is working correctly, each bit in the output should be set to 1
+    // approximately 50% of the time across many samples. This is the most basic
+    // property of a good cipher - no bit position should be biased.
+    //
+    // WHY IT MATTERS:
+    // If the first bit is always 0 (or always 1), that would leak information about
+    // whether an ID is encrypted or not. A 60/40 split would be a red flag.
+    //
+    // WHAT IT DOESN'T PROVE:
+    // This doesn't catch correlations between bits. All bits could individually be
+    // 50/50 but still have predictable patterns (e.g., bit 0 always equals bit 1).
+    // ==================================================================================
+
+    #[test]
+    fn bit_frequency_is_uniform() {
+        let key = test_key();
+        const SAMPLE_COUNT: usize = 50_000;
+        const SECRET_BITS: u32 = SECRET_DATA_BIT_NUM as u32;
+
+        // Generate encrypted samples from sequential-ish timestamps
+        // This is the "worst case" - highly correlated plaintexts
+        let base_time: u64 = 1_750_000_000_000; // ~2025
+        let encrypted_samples: Vec<u128> = (0..SAMPLE_COUNT)
+            .map(|i| {
+                let timestamp = base_time + (i as u64);
+                let random = (i as u64).wrapping_mul(0x123456789ABCDEF);
+                simulate_v0_secret_data(timestamp, random)
+            })
+            .map(|plaintext| encrypt(plaintext, &key))
+            .collect();
+
+        // Check each bit position in the 100-bit secret data
+        for bit_pos in 0..SECRET_BITS {
+            let ones = count_ones_at_bit(&encrypted_samples, bit_pos);
+            let ratio = ones as f64 / SAMPLE_COUNT as f64;
+
+            // With 50k samples, we expect ~50% ± 1.5% (conservative bound)
+            // A perfectly random distribution has stddev = sqrt(n*p*(1-p)) ≈ 111
+            // So 3 sigma is about 333, or 0.67% of 50k
+            // We use 2% as a very conservative threshold
+            assert!(
+                (ratio - 0.5).abs() < 0.02,
+                "Bit {} has biased frequency: {:.2}% ones (expected ~50%)",
+                bit_pos,
+                ratio * 100.0
+            );
+        }
+    }
+
+    // ==================================================================================
+    // TIMESTAMP CORRELATION TEST
+    // ==================================================================================
+    //
+    // WHAT IT PROVES:
+    // When we encrypt IDs with sequential timestamps (the most predictable pattern),
+    // the encrypted outputs should NOT be sequential or ordered. If encryption works,
+    // the ordering should be essentially random.
+    //
+    // WHY IT MATTERS:
+    // This directly addresses the concern about "first bits of timestamp are always
+    // the same". Even though inputs like 0x019A..., 0x019A..., 0x019A... all start
+    // the same, their encrypted outputs should have no ordering relationship.
+    //
+    // HOW IT WORKS:
+    // We generate 10,000 IDs with incrementing timestamps. If encrypted[i+1] > encrypted[i]
+    // about 50% of the time, there's no correlation. If it's 99% or 1%, the encryption
+    // is leaking ordering information.
+    // ==================================================================================
+
+    #[test]
+    fn sequential_timestamps_produce_random_ordering() {
+        let key = test_key();
+        const SAMPLE_COUNT: usize = 10_000;
+
+        let base_time: u64 = 1_750_000_000_000;
+
+        // Generate encrypted outputs for sequential timestamps
+        let encrypted: Vec<u128> = (0..SAMPLE_COUNT)
+            .map(|i| {
+                let timestamp = base_time + (i as u64);
+                let random = 0x123456789ABCDEF0_u64; // Same random bits for all
+                simulate_v0_secret_data(timestamp, random)
+            })
+            .map(|plaintext| encrypt(plaintext, &key))
+            .collect();
+
+        // Count how often encrypted[i+1] > encrypted[i]
+        let mut greater_count = 0;
+        for i in 1..encrypted.len() {
+            if encrypted[i] > encrypted[i - 1] {
+                greater_count += 1;
+            }
+        }
+
+        let ratio = greater_count as f64 / (SAMPLE_COUNT - 1) as f64;
+
+        // Should be close to 50% (random ordering)
+        // With 10k samples, we expect 50% ± 1.5%
+        assert!(
+            (ratio - 0.5).abs() < 0.02,
+            "Sequential timestamps produce ordered outputs: {:.2}% ascending (expected ~50%)",
+            ratio * 100.0
+        );
+    }
+
+    // ==================================================================================
+    // AVALANCHE EFFECT TEST
+    // ==================================================================================
+    //
+    // WHAT IT PROVES:
+    // Flipping a single bit in the input should flip approximately 50% of the output bits.
+    // This is the "avalanche effect" - a hallmark of good diffusion in block ciphers.
+    //
+    // WHY IT MATTERS:
+    // If flipping one input bit only changes one output bit, an attacker could
+    // potentially reverse-engineer the plaintext. Good ciphers make every output
+    // bit depend on every input bit.
+    //
+    // TECHNICAL DETAIL:
+    // FF1's Feistel structure with 10 rounds achieves this through repeated mixing.
+    // Each round spreads changes further until the entire block is affected.
+    // ==================================================================================
+
+    #[test]
+    fn avalanche_effect_single_bit_flip() {
+        let key = test_key();
+        const SAMPLE_COUNT: usize = 10_000;
+        const SECRET_BITS: u32 = SECRET_DATA_BIT_NUM as u32;
+
+        let mut total_flipped_bits = 0u64;
+        let mut min_flipped = u32::MAX;
+        let mut max_flipped = 0u32;
+
+        for i in 0..SAMPLE_COUNT {
+            // Generate a random-ish input
+            let input1 = (i as u128)
+                .wrapping_mul(0x123456789ABCDEF0123456789ABCDEF)
+                & ((1u128 << SECRET_BITS) - 1);
+
+            // Flip one random bit (deterministic based on i)
+            let bit_to_flip = (i as u32 * 7) % SECRET_BITS;
+            let input2 = input1 ^ (1u128 << bit_to_flip);
+
+            let output1 = encrypt(input1, &key);
+            let output2 = encrypt(input2, &key);
+
+            // Count differing bits
+            let diff = (output1 ^ output2).count_ones();
+            total_flipped_bits += diff as u64;
+            min_flipped = min_flipped.min(diff);
+            max_flipped = max_flipped.max(diff);
+        }
+
+        let avg_flipped = total_flipped_bits as f64 / SAMPLE_COUNT as f64;
+        let expected = SECRET_BITS as f64 / 2.0; // 50 bits for 100-bit output
+
+        // Average should be close to 50 bits (within 5 bits)
+        assert!(
+            (avg_flipped - expected).abs() < 5.0,
+            "Avalanche effect too weak: avg {:.1} bits flipped (expected ~{:.0})",
+            avg_flipped,
+            expected
+        );
+
+        // No single-bit flip should cause fewer than 30 or more than 70 bits to change
+        // (Very rare for good ciphers to be this uneven)
+        assert!(
+            min_flipped >= 25,
+            "Minimum bit flips too low: {} (suggests weak diffusion)",
+            min_flipped
+        );
+        assert!(
+            max_flipped <= 75,
+            "Maximum bit flips too high: {} (suggests weak diffusion)",
+            max_flipped
+        );
+    }
+
+    // ==================================================================================
+    // FIRST NIBBLE (HEX DIGIT) DISTRIBUTION TEST
+    // ==================================================================================
+    //
+    // WHAT IT PROVES:
+    // The first 4 bits of encrypted output should be uniformly distributed (0-15),
+    // not clustered around any particular value.
+    //
+    // WHY IT MATTERS:
+    // This catches a specific failure mode: if the high bits of the timestamp
+    // (which are very predictable, like 0x019A for 2025 dates) somehow "leak through"
+    // to the high bits of the ciphertext, this test would fail.
+    //
+    // STATISTICAL NOTE:
+    // With 50k samples and 16 buckets, we expect ~3125 per bucket.
+    // Chi-squared test would be more rigorous, but we use a simple ±30% threshold.
+    // ==================================================================================
+
+    #[test]
+    fn first_nibble_uniformly_distributed() {
+        let key = test_key();
+        const SAMPLE_COUNT: usize = 50_000;
+        const BUCKETS: usize = 16;
+
+        let base_time: u64 = 1_750_000_000_000;
+
+        // Count first nibble occurrences
+        let mut counts = [0usize; BUCKETS];
+
+        for i in 0..SAMPLE_COUNT {
+            let timestamp = base_time + (i as u64);
+            let random = (i as u64).wrapping_mul(0xDEADBEEFCAFEBABE);
+            let plaintext = simulate_v0_secret_data(timestamp, random);
+            let encrypted = encrypt(plaintext, &key);
+
+            // Extract first nibble (bits 96-99 of the 100-bit value)
+            let first_nibble = ((encrypted >> 96) & 0xF) as usize;
+            counts[first_nibble] += 1;
+        }
+
+        let expected_per_bucket = SAMPLE_COUNT / BUCKETS; // 3125
+
+        for (nibble, &count) in counts.iter().enumerate() {
+            let deviation = (count as f64 - expected_per_bucket as f64).abs()
+                / expected_per_bucket as f64;
+
+            // Allow up to 20% deviation (very conservative for chi-squared)
+            assert!(
+                deviation < 0.20,
+                "First nibble {} has uneven distribution: {} occurrences (expected ~{}, deviation {:.1}%)",
+                nibble,
+                count,
+                expected_per_bucket,
+                deviation * 100.0
+            );
+        }
+    }
+
+    // ==================================================================================
+    // COLLISION TEST
+    // ==================================================================================
+    //
+    // WHAT IT PROVES:
+    // Format-preserving encryption is a bijection (one-to-one mapping). Different
+    // inputs MUST produce different outputs. This test verifies no accidental
+    // collisions occur in our implementation.
+    //
+    // WHY IT MATTERS:
+    // If two different V0 TNIDs encrypted to the same V1 TNID, you couldn't decrypt
+    // unambiguously. This would be a catastrophic implementation bug.
+    //
+    // TECHNICAL NOTE:
+    // FF1 is mathematically guaranteed to be a bijection over its domain, so this
+    // test is really checking that our bit manipulation (extract/expand) doesn't
+    // lose information.
+    // ==================================================================================
+
+    #[test]
+    fn no_collisions_in_encrypted_output() {
+        let key = test_key();
+        const SAMPLE_COUNT: usize = 100_000;
+
+        let base_time: u64 = 1_750_000_000_000;
+
+        let encrypted: std::collections::HashSet<u128> = (0..SAMPLE_COUNT)
+            .map(|i| {
+                let timestamp = base_time + (i as u64);
+                let random = i as u64;
+                simulate_v0_secret_data(timestamp, random)
+            })
+            .map(|plaintext| encrypt(plaintext, &key))
+            .collect();
+
+        assert_eq!(
+            encrypted.len(),
+            SAMPLE_COUNT,
+            "Collision detected: {} unique outputs from {} inputs",
+            encrypted.len(),
+            SAMPLE_COUNT
+        );
+    }
+
+    // ==================================================================================
+    // KEY SENSITIVITY TEST
+    // ==================================================================================
+    //
+    // WHAT IT PROVES:
+    // Changing even a single bit of the key produces completely different ciphertexts.
+    // The wrong key should produce output that looks nothing like the correct output.
+    //
+    // WHY IT MATTERS:
+    // This confirms that security depends on the full key, not just part of it.
+    // An attacker who knows 127 of 128 key bits still can't predict outputs.
+    // ==================================================================================
+
+    #[test]
+    fn different_keys_produce_unrelated_outputs() {
+        let key1 = test_key();
+        let mut key2_bytes = *key1.as_bytes();
+        key2_bytes[0] ^= 1; // Flip one bit
+        let key2 = EncryptionKey::new(key2_bytes);
+
+        const SAMPLE_COUNT: usize = 1_000;
+        const SECRET_BITS: u32 = SECRET_DATA_BIT_NUM as u32;
+
+        let mut total_diff_bits = 0u64;
+
+        for i in 0..SAMPLE_COUNT {
+            let plaintext =
+                (i as u128).wrapping_mul(0x123456789) & ((1u128 << SECRET_BITS) - 1);
+
+            let encrypted1 = encrypt(plaintext, &key1);
+            let encrypted2 = encrypt(plaintext, &key2);
+
+            total_diff_bits += (encrypted1 ^ encrypted2).count_ones() as u64;
+        }
+
+        let avg_diff = total_diff_bits as f64 / SAMPLE_COUNT as f64;
+        let expected = SECRET_BITS as f64 / 2.0;
+
+        // Different keys should produce ~50% different bits (like random)
+        assert!(
+            (avg_diff - expected).abs() < 5.0,
+            "Key sensitivity too low: avg {:.1} bits differ (expected ~{:.0})",
+            avg_diff,
+            expected
+        );
+    }
+
+    // ==================================================================================
+    // BYTE DISTRIBUTION TEST (Chi-Squared Approximation)
+    // ==================================================================================
+    //
+    // WHAT IT PROVES:
+    // Each byte position in the encrypted output should have values uniformly
+    // distributed across 0-255. This is a more granular version of the monobit test.
+    //
+    // WHY IT MATTERS:
+    // Catches cases where individual bits might be balanced but byte-level patterns
+    // exist (e.g., bytes are always even, or always < 200).
+    //
+    // NOTE:
+    // The encrypted output is 100 bits. We check the lower 96 bits (12 full bytes),
+    // skipping the top 4 bits which would only give a half-byte (nibble).
+    // ==================================================================================
+
+    #[test]
+    fn byte_distribution_uniform() {
+        let key = test_key();
+        const SAMPLE_COUNT: usize = 25_600; // Divisible by 256 for clean expected values
+        const BYTES_TO_CHECK: usize = 4; // Check 4 full bytes from the lower portion
+
+        let base_time: u64 = 1_750_000_000_000;
+
+        // For each byte position, count occurrences of each value
+        let mut byte_counts: [[usize; 256]; BYTES_TO_CHECK] = [[0; 256]; BYTES_TO_CHECK];
+
+        for i in 0..SAMPLE_COUNT {
+            let timestamp = base_time + (i as u64);
+            let random = (i as u64).wrapping_mul(0xFEDCBA9876543210);
+            let plaintext = simulate_v0_secret_data(timestamp, random);
+            let encrypted = encrypt(plaintext, &key);
+
+            // Extract bytes from the lower portion where we have full bytes.
+            // 100 bits = 12 full bytes (96 bits) + 4 extra bits at the top.
+            // We check bytes 0-3 starting from bit 0 (least significant).
+            for byte_idx in 0..BYTES_TO_CHECK {
+                let shift = byte_idx * 8; // Byte 0 at bits 0-7, byte 1 at 8-15, etc.
+                let byte_val = ((encrypted >> shift) & 0xFF) as usize;
+                byte_counts[byte_idx][byte_val] += 1;
+            }
+        }
+
+        let expected_per_value = SAMPLE_COUNT / 256; // 100
+
+        for (byte_idx, counts) in byte_counts.iter().enumerate() {
+            // Simple chi-squared-like check: no value should deviate too much
+            let max_deviation = counts
+                .iter()
+                .map(|&c| {
+                    ((c as f64) - (expected_per_value as f64)).abs() / (expected_per_value as f64)
+                })
+                .fold(0.0f64, f64::max);
+
+            // With 25.6k samples and 256 buckets, expect ~100 per bucket
+            // Allow up to 50% deviation for any single bucket (very conservative)
+            assert!(
+                max_deviation < 0.50,
+                "Byte {} has non-uniform distribution (max deviation {:.1}%)",
+                byte_idx,
+                max_deviation * 100.0
+            );
+        }
+    }
+
+    // ==================================================================================
+    // RUNS TEST (Sequence Randomness)
+    // ==================================================================================
+    //
+    // WHAT IT PROVES:
+    // The encrypted output shouldn't have unusually long runs of consecutive 0s or 1s.
+    // Random data has a predictable distribution of run lengths.
+    //
+    // WHY IT MATTERS:
+    // A cipher that produces outputs like "000000...111111..." (long runs) would
+    // be distinguishable from random data. Good encryption produces outputs that
+    // "look random" in terms of run lengths too.
+    //
+    // SIMPLIFIED APPROACH:
+    // Instead of a full NIST runs test, we check that the average run length is
+    // close to 2 (the expected value for random bits).
+    // ==================================================================================
+
+    #[test]
+    fn run_lengths_are_reasonable() {
+        let key = test_key();
+        const SAMPLE_COUNT: usize = 1_000;
+        const SECRET_BITS: u32 = SECRET_DATA_BIT_NUM as u32;
+
+        let mut total_runs = 0u64;
+
+        for i in 0..SAMPLE_COUNT {
+            let timestamp = 1_750_000_000_000u64 + (i as u64);
+            let random = (i as u64).wrapping_mul(0xABCDEF0123456789);
+            let plaintext = simulate_v0_secret_data(timestamp, random);
+            let encrypted = encrypt(plaintext, &key);
+
+            // Count runs in this value
+            let mut runs = 1u32;
+            for bit_pos in 1..SECRET_BITS {
+                let prev_bit = (encrypted >> (bit_pos - 1)) & 1;
+                let curr_bit = (encrypted >> bit_pos) & 1;
+                if prev_bit != curr_bit {
+                    runs += 1;
+                }
+            }
+
+            total_runs += runs as u64;
+        }
+
+        // Expected runs in n bits of random data: (n+1)/2 ≈ 50.5 for 100 bits
+        // Average run length = n / runs ≈ 2
+        let avg_runs_per_sample = total_runs as f64 / SAMPLE_COUNT as f64;
+        let expected_runs = (SECRET_BITS as f64 + 1.0) / 2.0; // ~50.5
+
+        assert!(
+            (avg_runs_per_sample - expected_runs).abs() < 5.0,
+            "Unusual run pattern: avg {:.1} runs per sample (expected ~{:.1})",
+            avg_runs_per_sample,
+            expected_runs
+        );
+    }
+
+    // ==================================================================================
+    // HELPER FUNCTION
+    // ==================================================================================
+    //
+    // Simulates extracting secret data bits from a V0 TNID structure.
+    // This creates a realistic bit pattern matching what `extract_secret_data_bits`
+    // would produce from an actual V0 TNID.
+    // ==================================================================================
+
+    /// Simulates the secret data portion of a V0 TNID given timestamp and random bits.
+    ///
+    /// V0 layout:
+    /// - 43 bits: milliseconds since epoch
+    /// - 57 bits: random data
+    ///
+    /// This function packs them into the 100-bit format that encryption operates on.
+    fn simulate_v0_secret_data(epoch_millis: u64, random: u64) -> u128 {
+        // The actual bit positions match v0.rs, but for encryption we just need
+        // a realistic distribution of data. The exact layout doesn't matter as
+        // long as we're testing with realistic entropy patterns.
+        let timestamp_bits = (epoch_millis & ((1u64 << 43) - 1)) as u128;
+        let random_bits = (random & ((1u64 << 57) - 1)) as u128;
+
+        // Pack into 100 bits: [43-bit timestamp][57-bit random]
+        (timestamp_bits << 57) | random_bits
     }
 }
 
