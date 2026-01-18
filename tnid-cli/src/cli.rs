@@ -1,6 +1,17 @@
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 
 const KEY_NAME: &str = "TNID_KEY";
+
+/// Output format for generated TNIDs
+#[derive(Clone, ValueEnum)]
+pub enum OutputFormat {
+    /// TNID string format: name.encodeddata
+    Tnid,
+    /// UUID hex format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    Uuid,
+    /// Raw 128-bit hex: 0x00000000000000000000000000000000
+    U128,
+}
 
 /// TNID - Generate, parse, and manipulate TNIDs
 #[derive(Parser)]
@@ -25,6 +36,10 @@ pub enum Cli {
         /// Which variant to generate (0-3)
         #[arg(short = 'n', long, default_value_t = 0)]
         variant: u8,
+
+        /// Output format: tnid (default), uuid, or u128
+        #[arg(short = 'o', long, default_value = "tnid")]
+        output: OutputFormat,
     },
 
     /// Encrypt a V0 TNID to V1
@@ -45,6 +60,10 @@ pub enum Cli {
         /// 32-character hex encryption key
         #[arg(env = KEY_NAME)]
         key: String,
+
+        /// Pass through V1 TNIDs unchanged instead of erroring
+        #[arg(short, long, default_value_t = false)]
+        passthrough: bool,
     },
 
     /// Decrypt a V1 TNID to V0
@@ -61,6 +80,10 @@ pub enum Cli {
         /// 32-character hex encryption key
         #[arg(env = KEY_NAME)]
         key: String,
+
+        /// Pass through V0 TNIDs unchanged instead of erroring
+        #[arg(short, long, default_value_t = false)]
+        passthrough: bool,
     },
 
     /// Show detailed TNID information
