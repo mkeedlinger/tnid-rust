@@ -126,7 +126,7 @@ delete_post(post_id);  // Works!
 | `rand` | ✓ | stable | Random v1 TNID generation (like UUIDv4) |
 | `encryption` | | beta | Encrypt v0 to v1 to hide timestamps from clients, decrypt on the backend |
 | `uuid` | | stable | Convert to/from the `uuid` crate's `Uuid` type |
-| `serde` | | alpha | `serde::Serialize` / `serde::Deserialize` for `Tnid<Name>`, `DynamicTnid`, `UUIDLike` |
+| `serde` | | alpha | `serde::Serialize` / `serde::Deserialize` for `Tnid<Name>`, `DynamicTnid`, `UuidLike` |
 | `sqlx-postgres` | | alpha | SQLx `Type`/`Encode`/`Decode` for Postgres UUID columns |
 | `sqlx-mysql` | | alpha | SQLx `Type`/`Encode`/`Decode` for MySQL/MariaDB (BINARY/BLOB/TEXT) |
 | `sqlx-sqlite` | | alpha | SQLx `Type`/`Encode`/`Decode` for SQLite (BLOB/TEXT) |

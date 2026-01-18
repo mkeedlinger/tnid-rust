@@ -3,18 +3,18 @@
 //! This module is enabled by the `serde` feature and implements:
 //! - `serde::Serialize` / `serde::Deserialize` for [`crate::Tnid`]
 //! - `serde::Serialize` / `serde::Deserialize` for [`crate::DynamicTnid`]
-//! - `serde::Serialize` / `serde::Deserialize` for [`crate::UUIDLike`]
+//! - `serde::Serialize` / `serde::Deserialize` for [`crate::UuidLike`]
 //!
 //! ## Representation
 //!
 //! - **Human-readable serializers** (e.g., JSON): serialize as a string
 //!   - `Tnid<Name>` / `DynamicTnid`: TNID string (`name.data`)
-//!   - `UUIDLike`: UUID string (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)
+//!   - `UuidLike`: UUID string (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)
 //! - **Non-human-readable serializers** (e.g., bincode): serialize as 16 UUID bytes (big-endian)
 //!
 //! Deserialization accepts the corresponding representation.
 
-use crate::{Case, DynamicTnid, ParseTnidError, Tnid, TnidName, UUIDLike};
+use crate::{Case, DynamicTnid, ParseTnidError, Tnid, TnidName, UuidLike};
 
 fn parse_tnid_or_uuid_str_for_typed<Name: TnidName>(s: &str) -> Result<Tnid<Name>, ParseTnidError> {
     // TNID strings always contain exactly one '.' separator.
@@ -33,8 +33,8 @@ fn parse_tnid_or_uuid_str_for_dynamic(s: &str) -> Result<DynamicTnid, ParseTnidE
     }
 }
 
-fn parse_uuidlike_str(s: &str) -> Result<UUIDLike, crate::ParseUuidStringError> {
-    UUIDLike::parse_uuid_string(s)
+fn parse_uuid_like_str(s: &str) -> Result<UuidLike, crate::ParseUuidStringError> {
+    UuidLike::parse_uuid_string(s)
 }
 
 fn bytes_to_u128<E>(bytes: &[u8]) -> Result<u128, E>
@@ -162,9 +162,9 @@ impl<'de> serde::Deserialize<'de> for DynamicTnid {
     }
 }
 
-// ---- UUIDLike ----
+// ---- UuidLike ----
 
-impl serde::Serialize for UUIDLike {
+impl serde::Serialize for UuidLike {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -178,19 +178,19 @@ impl serde::Serialize for UUIDLike {
     }
 }
 
-impl<'de> serde::Deserialize<'de> for UUIDLike {
+impl<'de> serde::Deserialize<'de> for UuidLike {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         if deserializer.is_human_readable() {
             let s = <&str as serde::Deserialize>::deserialize(deserializer)?;
-            parse_uuidlike_str(s).map_err(serde::de::Error::custom)
+            parse_uuid_like_str(s).map_err(serde::de::Error::custom)
         } else {
             struct BytesVisitor;
 
             impl<'de> serde::de::Visitor<'de> for BytesVisitor {
-                type Value = UUIDLike;
+                type Value = UuidLike;
 
                 fn expecting(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                     f.write_str("16 bytes (UUID big-endian)")
@@ -201,7 +201,7 @@ impl<'de> serde::Deserialize<'de> for UUIDLike {
                     E: serde::de::Error,
                 {
                     let id = bytes_to_u128::<E>(v)?;
-                    Ok(UUIDLike::new(id))
+                    Ok(UuidLike::new(id))
                 }
 
                 fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
@@ -281,14 +281,14 @@ mod tests {
 
     #[test]
     fn serde_uuidlike_roundtrip() {
-        let uuid_like = UUIDLike::new(0x12345678_1234_1234_1234_123456789abc);
+        let uuid_like = UuidLike::new(0x12345678_1234_1234_1234_123456789abc);
 
         let json = serde_json::to_string(&uuid_like).expect("serialize JSON");
-        let parsed: UUIDLike = serde_json::from_str(&json).expect("deserialize JSON");
+        let parsed: UuidLike = serde_json::from_str(&json).expect("deserialize JSON");
         assert_eq!(parsed.as_u128(), uuid_like.as_u128());
 
         let bytes = bincode::serialize(&uuid_like).expect("serialize bincode");
-        let parsed_bin: UUIDLike = bincode::deserialize(&bytes).expect("deserialize bincode");
+        let parsed_bin: UuidLike = bincode::deserialize(&bytes).expect("deserialize bincode");
         assert_eq!(parsed_bin.as_u128(), uuid_like.as_u128());
     }
 }

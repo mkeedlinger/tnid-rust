@@ -34,7 +34,7 @@ pub use dynamic_tnid::DynamicTnid;
 pub use name_encoding::{NameBitsValidation, NameError, NameStr};
 pub use tnid_variant::TnidVariant;
 pub use uuidlike::Case;
-pub use uuidlike::{ParseUuidStringError, UUIDLike};
+pub use uuidlike::{ParseUuidStringError, UuidLike};
 
 /// Error when parsing a TNID from a string or u128.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -147,7 +147,7 @@ pub trait TnidName {
 /// `Tnid<User>` and `Tnid<Post>` are distinct types that cannot be mixed.
 ///
 /// All validation happens at construction time, so any `Tnid<Name>` instance is guaranteed
-/// to be valid. If you need to work with potentially invalid 128-bit values, use [`UUIDLike`]
+/// to be valid. If you need to work with potentially invalid 128-bit values, use [`UuidLike`]
 /// for inspection without validation.
 #[derive(PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Tnid<Name: TnidName> {
@@ -558,7 +558,7 @@ impl<Name: TnidName> Tnid<Name> {
     /// - The string is not valid UUID format
     /// - The UUID is not a valid TNID (wrong version/variant bits or name mismatch)
     ///
-    /// For inspecting why a UUID might not be a valid TNID, see [`UUIDLike`].
+    /// For inspecting why a UUID might not be a valid TNID, see [`UuidLike`].
     ///
     /// # Examples
     ///
@@ -590,7 +590,7 @@ impl<Name: TnidName> Tnid<Name> {
     /// assert!(Tnid::<User>::parse_uuid_string("not-a-uuid").is_err());
     /// ```
     pub fn parse_uuid_string(uuid_string: &str) -> Result<Self, ParseTnidError> {
-        let id = UUIDLike::parse_uuid_string(uuid_string)
+        let id = UuidLike::parse_uuid_string(uuid_string)
             .map_err(ParseTnidError::InvalidUuidFormat)?
             .as_u128();
 
@@ -609,7 +609,7 @@ impl<Name: TnidName> Tnid<Name> {
     /// - Correct UUIDv8 version and variant bits
     ///
     /// If you need to inspect non-compliant IDs or understand why parsing failed,
-    /// consider using [`UUIDLike`] which provides lower-level access.
+    /// consider using [`UuidLike`] which provides lower-level access.
     ///
     /// # Examples
     ///

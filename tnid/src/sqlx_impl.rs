@@ -66,7 +66,7 @@ mod postgres {
                 sqlx::postgres::PgValueFormat::Binary => be_bytes_to_u128(value.as_bytes()?)?,
                 sqlx::postgres::PgValueFormat::Text => {
                     let s = value.as_str()?;
-                    crate::UUIDLike::parse_uuid_string(s)
+                    crate::UuidLike::parse_uuid_string(s)
                         .map_err(|e| Box::new(e) as sqlx::error::BoxDynError)?
                         .as_u128()
                 }
@@ -105,7 +105,7 @@ mod postgres {
                 sqlx::postgres::PgValueFormat::Binary => be_bytes_to_u128(value.as_bytes()?)?,
                 sqlx::postgres::PgValueFormat::Text => {
                     let s = value.as_str()?;
-                    crate::UUIDLike::parse_uuid_string(s)
+                    crate::UuidLike::parse_uuid_string(s)
                         .map_err(|e| Box::new(e) as sqlx::error::BoxDynError)?
                         .as_u128()
                 }
@@ -271,7 +271,7 @@ mod sqlite {
                         .map_err(|e| Box::new(e) as sqlx::error::BoxDynError)?
                         .as_u128()
                 } else {
-                    crate::UUIDLike::parse_uuid_string(s)
+                    crate::UuidLike::parse_uuid_string(s)
                         .map_err(|e| Box::new(e) as sqlx::error::BoxDynError)?
                         .as_u128()
                 }

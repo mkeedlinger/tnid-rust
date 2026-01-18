@@ -35,7 +35,7 @@
 #[cfg(feature = "encryption")]
 use crate::encryption::EncryptionKey;
 use crate::{
-    Case, NameStr, Tnid, TnidName, TnidVariant, UUIDLike, data_encoding, name_encoding, utils, v0,
+    Case, NameStr, Tnid, TnidName, TnidVariant, UuidLike, data_encoding, name_encoding, utils, v0,
     v1,
 };
 
@@ -49,8 +49,8 @@ use crate::{
 ///
 /// - Convert from [`Tnid<Name>`](crate::Tnid) using `From`
 /// - Convert to [`Tnid<Name>`](crate::Tnid) using `TryFrom` (validates name matches)
-/// - Convert from [`UUIDLike`] using `TryFrom` (validates TNID structure)
-/// - Convert to [`UUIDLike`] using `From`
+/// - Convert from [`UuidLike`] using `TryFrom` (validates TNID structure)
+/// - Convert to [`UuidLike`] using `From`
 ///
 /// # Examples
 ///
@@ -345,7 +345,7 @@ impl DynamicTnid {
     /// assert!(DynamicTnid::parse_uuid_string("not-a-uuid").is_err());
     /// ```
     pub fn parse_uuid_string(s: &str) -> Result<Self, crate::ParseTnidError> {
-        let id = crate::UUIDLike::parse_uuid_string(s)
+        let id = crate::UuidLike::parse_uuid_string(s)
             .map_err(crate::ParseTnidError::InvalidUuidFormat)?
             .as_u128();
 
@@ -547,10 +547,10 @@ impl<Name: TnidName> From<Tnid<Name>> for DynamicTnid {
     }
 }
 
-impl TryFrom<UUIDLike> for DynamicTnid {
+impl TryFrom<UuidLike> for DynamicTnid {
     type Error = crate::ParseTnidError;
 
-    fn try_from(uuid: UUIDLike) -> Result<Self, Self::Error> {
+    fn try_from(uuid: UuidLike) -> Result<Self, Self::Error> {
         Self::from_u128(uuid.as_u128())
     }
 }
@@ -563,9 +563,9 @@ impl<Name: TnidName> TryFrom<DynamicTnid> for Tnid<Name> {
     }
 }
 
-impl From<DynamicTnid> for UUIDLike {
+impl From<DynamicTnid> for UuidLike {
     fn from(dynamic: DynamicTnid) -> Self {
-        UUIDLike::new(dynamic.0)
+        UuidLike::new(dynamic.0)
     }
 }
 

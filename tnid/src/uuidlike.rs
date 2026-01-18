@@ -3,9 +3,9 @@
 /// This type provides a way to work with 128-bit UUID-like values without the strict
 /// validation that [`Tnid`](crate::Tnid) requires. Unlike [`Tnid`](crate::Tnid), which
 /// only accepts values that conform to the TNID specification (correct UUIDv8 version/variant
-/// bits and valid name encoding), `UUIDLike` accepts any 128-bit value.
+/// bits and valid name encoding), `UuidLike` accepts any 128-bit value.
 ///
-/// This makes `UUIDLike` useful for:
+/// This makes `UuidLike` useful for:
 /// - Inspecting potentially invalid TNIDs to understand why they don't parse
 /// - Converting between different UUID representations (u128, hex strings) without validation
 /// - Working with UUIDs from external systems that may not be TNIDs
@@ -15,10 +15,10 @@
 ///
 /// Basic usage:
 /// ```rust
-/// use tnid::{Case, UUIDLike};
+/// use tnid::{Case, UuidLike};
 ///
 /// // Create from any 128-bit value
-/// let uuid_like = UUIDLike::new(0x12345678_1234_1234_1234_123456789abc);
+/// let uuid_like = UuidLike::new(0x12345678_1234_1234_1234_123456789abc);
 ///
 /// // Convert to different representations
 /// let as_u128 = uuid_like.as_u128();
@@ -27,7 +27,7 @@
 ///
 /// Inspecting potentially invalid TNIDs:
 /// ```rust
-/// use tnid::{UUIDLike, Tnid, TnidName, NameStr};
+/// use tnid::{UuidLike, Tnid, TnidName, NameStr};
 ///
 /// struct User;
 /// impl TnidName for User {
@@ -36,7 +36,7 @@
 ///
 /// // Parse a UUID string that might not be a valid TNID
 /// let uuid_str = "cab1952a-f09d-86d9-928e-96ea03dc6af3";
-/// let uuid_like = UUIDLike::parse_uuid_string(uuid_str).unwrap();
+/// let uuid_like = UuidLike::parse_uuid_string(uuid_str).unwrap();
 ///
 /// // Try to convert to TNID - this performs validation
 /// match Tnid::<User>::from_u128(uuid_like.as_u128()) {
@@ -105,42 +105,42 @@ pub enum Case {
 
 /// A wrapper for 128-bit values that may or may not be valid TNIDs (or UUIDs for that matter).
 ///
-/// `UUIDLike` provides parsing and formatting of UUID strings and conversion to/from `u128`,
+/// `UuidLike` provides parsing and formatting of UUID strings and conversion to/from `u128`,
 /// without enforcing validation rules.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct UUIDLike(u128);
+pub struct UuidLike(u128);
 
-impl std::fmt::Debug for UUIDLike {
+impl std::fmt::Debug for UuidLike {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_uuid_string(Case::Lower))
     }
 }
 
-impl UUIDLike {
+impl UuidLike {
     /// Returns the raw 128-bit value.
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::UUIDLike;
+    /// use tnid::UuidLike;
     ///
-    /// let uuid_like = UUIDLike::new(0x12345678_1234_1234_1234_123456789abc);
+    /// let uuid_like = UuidLike::new(0x12345678_1234_1234_1234_123456789abc);
     /// assert_eq!(uuid_like.as_u128(), 0x12345678_1234_1234_1234_123456789abc);
     /// ```
     pub fn as_u128(&self) -> u128 {
         self.0
     }
 
-    /// Creates a new `UUIDLike` from a 128-bit value.
+    /// Creates a new `UuidLike` from a 128-bit value.
     ///
     /// Accepts any `u128` value without validation.
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::UUIDLike;
+    /// use tnid::UuidLike;
     ///
-    /// let uuid_like = UUIDLike::new(0x12345678_1234_1234_1234_123456789abc);
+    /// let uuid_like = UuidLike::new(0x12345678_1234_1234_1234_123456789abc);
     /// assert_eq!(uuid_like.as_u128(), 0x12345678_1234_1234_1234_123456789abc);
     /// ```
     pub fn new(id: u128) -> Self {
@@ -158,9 +158,9 @@ impl UUIDLike {
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::{Case, UUIDLike};
+    /// use tnid::{Case, UuidLike};
     ///
-    /// let uuid_like = UUIDLike::new(0xCAB1952A_F09D_86D9_928E_96EA03DC6AF3);
+    /// let uuid_like = UuidLike::new(0xCAB1952A_F09D_86D9_928E_96EA03DC6AF3);
     ///
     /// let lowercase = uuid_like.to_uuid_string(Case::Lower);
     /// assert_eq!(lowercase, "cab1952a-f09d-86d9-928e-96ea03dc6af3");
@@ -172,7 +172,7 @@ impl UUIDLike {
         utils::u128_to_uuid_string(self.0, case)
     }
 
-    /// Parses a UUID hex string into a `UUIDLike`.
+    /// Parses a UUID hex string into a `UuidLike`.
     ///
     /// Accepts the standard UUID format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
     ///
@@ -183,22 +183,22 @@ impl UUIDLike {
     /// # Examples
     ///
     /// ```rust
-    /// use tnid::UUIDLike;
+    /// use tnid::UuidLike;
     ///
     /// // Parse lowercase
-    /// let uuid = UUIDLike::parse_uuid_string("cab1952a-f09d-86d9-928e-96ea03dc6af3");
+    /// let uuid = UuidLike::parse_uuid_string("cab1952a-f09d-86d9-928e-96ea03dc6af3");
     /// assert!(uuid.is_ok());
     ///
     /// // Parse uppercase
-    /// let uuid = UUIDLike::parse_uuid_string("CAB1952A-F09D-86D9-928E-96EA03DC6AF3");
+    /// let uuid = UuidLike::parse_uuid_string("CAB1952A-F09D-86D9-928E-96EA03DC6AF3");
     /// assert!(uuid.is_ok());
     ///
     /// // Parse mixed case
-    /// let uuid = UUIDLike::parse_uuid_string("CaB1952a-F09D-86d9-928E-96ea03dc6af3");
+    /// let uuid = UuidLike::parse_uuid_string("CaB1952a-F09D-86d9-928E-96ea03dc6af3");
     /// assert!(uuid.is_ok());
     ///
     /// // Invalid format
-    /// assert!(UUIDLike::parse_uuid_string("not-a-uuid").is_err());
+    /// assert!(UuidLike::parse_uuid_string("not-a-uuid").is_err());
     /// ```
     pub fn parse_uuid_string(uuid_string: &str) -> Result<Self, ParseUuidStringError> {
         let bytes = uuid_string.as_bytes();
@@ -259,25 +259,25 @@ mod tests {
 
     #[test]
     fn parse_lowercase() {
-        let result = UUIDLike::parse_uuid_string("ffffffff-ffff-ffff-ffff-ffffffffffff");
+        let result = UuidLike::parse_uuid_string("ffffffff-ffff-ffff-ffff-ffffffffffff");
         assert_eq!(result.expect("valid UUID").as_u128(), u128::MAX);
     }
 
     #[test]
     fn parse_uppercase() {
-        let result = UUIDLike::parse_uuid_string("FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF");
+        let result = UuidLike::parse_uuid_string("FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF");
         assert_eq!(result.expect("valid UUID").as_u128(), u128::MAX);
     }
 
     #[test]
     fn parse_mixed_case() {
-        let result = UUIDLike::parse_uuid_string("AaBbCcDd-1234-5678-90aB-cDeF01234567");
+        let result = UuidLike::parse_uuid_string("AaBbCcDd-1234-5678-90aB-cDeF01234567");
         assert!(result.is_ok());
     }
 
     #[test]
     fn parse_all_zeros() {
-        let result = UUIDLike::parse_uuid_string("00000000-0000-0000-0000-000000000000");
+        let result = UuidLike::parse_uuid_string("00000000-0000-0000-0000-000000000000");
         assert_eq!(result.expect("valid UUID").as_u128(), 0);
     }
 }
