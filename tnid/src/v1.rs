@@ -1,12 +1,16 @@
-use crate::NameStr;
 use crate::name_encoding;
 use crate::utils;
+use crate::NameStr;
 
-const RANDOM_MASK: u128 = 0x00000fff_ffff_0fff_0fff_ffffffffffff;
-fn random_bits_mask(random: u128) -> u128 {
+/// Mask for the 100 random bits in a V1 TNID.
+pub const RANDOM_MASK: u128 = 0x00000fff_ffff_0fff_0fff_ffffffffffff;
+
+/// Places the random bits into their specific scattered positions for a V1 TNID.
+pub fn random_bits_mask(random: u128) -> u128 {
     random & RANDOM_MASK
 }
 
+/// Creates a 128-bit V1 ID from its component parts.
 pub fn make_from_parts(name: NameStr, random: u128) -> u128 {
     let mut id = 0u128;
 

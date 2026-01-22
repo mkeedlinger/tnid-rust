@@ -65,7 +65,9 @@ pub const fn name_valid_check(name: &str) {
     }
 }
 
+/// Minimum number of characters in a TNID name.
 pub const NAME_MIN_CHARS: usize = 1;
+/// Maximum number of characters in a TNID name.
 pub const NAME_MAX_CHARS: usize = 4;
 
 /// Result of validating the name bits in a TNID.
@@ -80,10 +82,14 @@ pub enum NameBitsValidation {
     Invalid,
 }
 
+/// Number of bits used for each character in a TNID name.
 pub const CHAR_BIT_LENGTH: u8 = 5;
-pub const CHAR_MASK: u8 = 0x1F;
+/// Mask for a single name character's bits.
+pub const CHAR_MASK: u8 = (1 << CHAR_BIT_LENGTH) - 1;
+/// Number of bits in a TNID that are not used for the name.
 pub const NON_NAME_BITS: u8 = u128::BITS as u8 - (CHAR_BIT_LENGTH * NAME_MAX_CHARS as u8);
 
+/// Mapping from numeric values to characters for name encoding.
 pub const CHAR_MAPPING: [(u8, u8); 31] = [
     // zero is a null terminator
 
@@ -298,6 +304,7 @@ impl<'a> NameStr<'a> {
     }
 }
 
+/// Generates a bitmask for the given name in its proper position.
 pub fn name_mask(name: NameStr) -> u128 {
     let name = name.as_str();
     let name_bytes = name.as_bytes();
@@ -325,6 +332,7 @@ pub fn name_mask(name: NameStr) -> u128 {
     mask
 }
 
+/// Validates that the name bits in a TNID are well-formed.
 pub fn validate_name_bits(id: u128) -> NameBitsValidation {
     // Extract the top 20 bits (bits 127-108)
     let name_bits = (id >> NON_NAME_BITS) as u32;
@@ -359,6 +367,7 @@ pub fn validate_name_bits(id: u128) -> NameBitsValidation {
     }
 }
 
+/// Returns the hex representation of the name portion of a TNID.
 pub fn name_bits_to_hex(id: u128) -> String {
     let name_bits = (id >> NON_NAME_BITS) as u32;
     let hex = format!("{:05x}", name_bits);
@@ -368,6 +377,7 @@ pub fn name_bits_to_hex(id: u128) -> String {
     hex
 }
 
+/// Extracts the name string from a TNID.
 pub fn extract_name_string(id: u128) -> Option<String> {
     let name_bits = (id >> NON_NAME_BITS) as u32;
 

@@ -817,6 +817,47 @@ impl<Name: TnidName> Tnid<Name> {
     }
 }
 
+/// Internal functions exposed for advanced usage behind the `internals` feature.
+///
+/// These functions are not part of the stable public API and provide low-level access
+/// to TNID bit manipulation and encoding.
+#[cfg(feature = "internals")]
+#[cfg_attr(docsrs, doc(cfg(feature = "internals")))]
+pub mod internals {
+    pub use crate::data_encoding::{
+        expand_data_bits, extract_data_bits, id_data_to_string, string_to_id_data,
+        CHAR_BIT_LENGTH as DATA_CHAR_BIT_LENGTH, CHAR_MAPPING as DATA_CHAR_MAPPING, DATA_BIT_NUM,
+        DATA_CHAR_ENCODING_LEN, LEFT_DATA_SECTION_MASK, MIDDLE_DATA_SECTION_MASK,
+        RIGHT_DATA_SECTION_MASK,
+    };
+    #[cfg(feature = "encryption")]
+    pub use crate::encryption::{
+        decrypt, decrypt_id_v1_to_v0, encrypt, encrypt_id_v0_to_v1, expand_secret_data_bits,
+        extract_secret_data_bits, COMPLETE_SECRET_DATA_MASK, LEFT_SECRET_DATA_SECTION_MASK,
+        MIDDLE_SECRET_DATA_SECTION_MASK, RIGHT_SECRET_DATA_SECTION_MASK,
+    };
+    pub use crate::name_encoding::{
+        extract_name_string, name_bits_to_hex, name_mask, validate_name_bits,
+        CHAR_BIT_LENGTH as NAME_CHAR_BIT_LENGTH, CHAR_MAPPING as NAME_CHAR_MAPPING,
+        CHAR_MASK as NAME_CHAR_MASK, NAME_MAX_CHARS, NAME_MIN_CHARS, NON_NAME_BITS,
+    };
+    pub use crate::utils::{
+        change_variant, hex_char_to_nibble, u128_to_uuid_string, uuid_and_variant_mask,
+        UUID_V8_MASK,
+    };
+    pub use crate::v0::{
+        make_from_parts as v0_make_from_parts, millis_mask as v0_millis_mask,
+        random_bits_mask as v0_random_bits_mask, RANDOM_MASK as V0_RANDOM_MASK,
+        TIMESTAMP_FIRST_28_MASK as V0_TIMESTAMP_FIRST_28_MASK,
+        TIMESTAMP_LAST_3_MASK as V0_TIMESTAMP_LAST_3_MASK,
+        TIMESTAMP_SECOND_12_MASK as V0_TIMESTAMP_SECOND_12_MASK,
+    };
+    pub use crate::v1::{
+        make_from_parts as v1_make_from_parts, random_bits_mask as v1_random_bits_mask,
+        RANDOM_MASK as V1_RANDOM_MASK,
+    };
+}
+
 impl<Name: TnidName> std::fmt::Display for Tnid<Name> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_tnid_string())

@@ -57,9 +57,9 @@
 //! ```
 
 use aes::Aes128;
-use fpe::ff1::{FF1, FlexibleNumeralString};
+use fpe::ff1::{FlexibleNumeralString, FF1};
 
-use crate::{TnidVariant, utils};
+use crate::{utils, TnidVariant};
 
 /// Error when creating an [`EncryptionKey`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -253,16 +253,24 @@ impl From<[u8; 16]> for EncryptionKey {
     }
 }
 
-const RIGHT_SECRET_DATA_SECTION_MASK: u128 = 0x00000000_0000_0000_0fff_ffffffffffff;
-const MIDDLE_SECRET_DATA_SECTION_MASK: u128 = 0x00000000_0000_0fff_0000_000000000000;
-const LEFT_SECRET_DATA_SECTION_MASK: u128 = 0x00000fff_ffff_0000_0000_000000000000;
+/// Mask for the right-most secret data section (bits 0-51).
+pub const RIGHT_SECRET_DATA_SECTION_MASK: u128 = 0x00000000_0000_0000_0fff_ffffffffffff;
+/// Mask for the middle secret data section (bits 64-75).
+pub const MIDDLE_SECRET_DATA_SECTION_MASK: u128 = 0x00000000_0000_0fff_0000_000000000000;
+/// Mask for the left-most secret data section (bits 80-107).
+pub const LEFT_SECRET_DATA_SECTION_MASK: u128 = 0x00000fff_ffff_0000_0000_000000000000;
 
-pub(crate) const COMPLETE_SECRET_DATA_MASK: u128 = RIGHT_SECRET_DATA_SECTION_MASK
+/// Mask for all secret data bits that are encrypted/decrypted.
+pub const COMPLETE_SECRET_DATA_MASK: u128 = RIGHT_SECRET_DATA_SECTION_MASK
     | MIDDLE_SECRET_DATA_SECTION_MASK
     | LEFT_SECRET_DATA_SECTION_MASK;
 
-/// Extract secret data bits (excludes name, UUID version/variant, and TNID variant)
-pub(crate) fn extract_secret_data_bits(id: u128) -> u128 {
+/// Extract secret data bits (excludes name, UUID version/variant, and TNID variant).
+///
+/// Compacts the bits from the three sections into a single 100-bit value.
+/// The returned `u128` will have its lowest 100 bits populated with data,
+/// and the highest 28 bits set to zero.
+pub fn extract_secret_data_bits(id: u128) -> u128 {
     let extracted = id & RIGHT_SECRET_DATA_SECTION_MASK;
 
     const BETWEEN_MIDDLE_RIGHT: i32 = 4;
@@ -272,8 +280,12 @@ pub(crate) fn extract_secret_data_bits(id: u128) -> u128 {
     extracted | ((id & LEFT_SECRET_DATA_SECTION_MASK) >> BETWEEN_LEFT_MIDDLE)
 }
 
-/// Expand compacted secret data bits back into their positions (inverse of extract_secret_data_bits)
-pub(crate) fn expand_secret_data_bits(bits: u128) -> u128 {
+/// Expand compacted secret data bits back into their positions.
+///
+/// This is the inverse of [`extract_secret_data_bits`].
+/// `bits` should have its lowest 100 bits populated with data,
+/// and the highest 28 bits set to zero (though higher bits are masked out anyway).
+pub fn expand_secret_data_bits(bits: u128) -> u128 {
     // Right section stays in place
     let expanded = bits & RIGHT_SECRET_DATA_SECTION_MASK;
 
@@ -308,7 +320,14 @@ fn hex_digits_to_u128(digits: Vec<u16>) -> u128 {
     result
 }
 
-pub(crate) fn encrypt(id_secret_data: u128, key: &EncryptionKey) -> u128 {
+/// Encrypts raw 100-bit secret data using FF1.
+///
+/// `id_secret_data` must have its lowest 100 bits populated with data to be encrypted.
+/// The highest 28 bits are ignored.
+///
+/// Returns a `u128` where the lowest 100 bits contain the encrypted data,
+/// and the highest 28 bits are zero.
+pub fn encrypt(id_secret_data: u128, key: &EncryptionKey) -> u128 {
     // Mask to only encrypt the lower 100 bits
     let mask = (1u128 << SECRET_DATA_BIT_NUM) - 1;
     let data = id_secret_data & mask;
@@ -324,7 +343,14 @@ pub(crate) fn encrypt(id_secret_data: u128, key: &EncryptionKey) -> u128 {
     hex_digits_to_u128(encrypted.into())
 }
 
-pub(crate) fn decrypt(id_secret_data: u128, key: &EncryptionKey) -> u128 {
+/// Decrypts raw 100-bit secret data using FF1.
+///
+/// `id_secret_data` must have its lowest 100 bits populated with data to be decrypted.
+/// The highest 28 bits are ignored.
+///
+/// Returns a `u128` where the lowest 100 bits contain the decrypted data,
+/// and the highest 28 bits are zero.
+pub fn decrypt(id_secret_data: u128, key: &EncryptionKey) -> u128 {
     // Mask to only decrypt the lower 100 bits
     let mask = (1u128 << SECRET_DATA_BIT_NUM) - 1;
     let data = id_secret_data & mask;
@@ -344,7 +370,7 @@ pub(crate) fn decrypt(id_secret_data: u128, key: &EncryptionKey) -> u128 {
 ///
 /// Returns `Err` if the ID is V2/V3 (unsupported variants).
 /// Returns the original ID unchanged if it's already V1.
-pub(crate) fn encrypt_id_v0_to_v1(id: u128, key: &EncryptionKey) -> Result<u128, EncryptionError> {
+pub fn encrypt_id_v0_to_v1(id: u128, key: &EncryptionKey) -> Result<u128, EncryptionError> {
     match TnidVariant::from_id(id) {
         TnidVariant::V0 => {}
         TnidVariant::V1 => return Ok(id),
@@ -375,7 +401,7 @@ pub(crate) fn encrypt_id_v0_to_v1(id: u128, key: &EncryptionKey) -> Result<u128,
 ///
 /// Returns `Err` if the ID is V2/V3 (unsupported variants).
 /// Returns the original ID unchanged if it's already V0.
-pub(crate) fn decrypt_id_v1_to_v0(id: u128, key: &EncryptionKey) -> Result<u128, EncryptionError> {
+pub fn decrypt_id_v1_to_v0(id: u128, key: &EncryptionKey) -> Result<u128, EncryptionError> {
     match TnidVariant::from_id(id) {
         TnidVariant::V0 => return Ok(id),
         TnidVariant::V1 => {}
@@ -590,8 +616,7 @@ mod tests_release {
 
         for i in 0..SAMPLE_COUNT {
             // Generate a random-ish input
-            let input1 = (i as u128)
-                .wrapping_mul(0x123456789ABCDEF0123456789ABCDEF)
+            let input1 = (i as u128).wrapping_mul(0x123456789ABCDEF0123456789ABCDEF)
                 & ((1u128 << SECRET_BITS) - 1);
 
             // Flip one random bit (deterministic based on i)
@@ -676,8 +701,8 @@ mod tests_release {
         let expected_per_bucket = SAMPLE_COUNT / BUCKETS; // 3125
 
         for (nibble, &count) in counts.iter().enumerate() {
-            let deviation = (count as f64 - expected_per_bucket as f64).abs()
-                / expected_per_bucket as f64;
+            let deviation =
+                (count as f64 - expected_per_bucket as f64).abs() / expected_per_bucket as f64;
 
             // Allow up to 20% deviation (very conservative for chi-squared)
             assert!(
@@ -761,8 +786,7 @@ mod tests_release {
         let mut total_diff_bits = 0u64;
 
         for i in 0..SAMPLE_COUNT {
-            let plaintext =
-                (i as u128).wrapping_mul(0x123456789) & ((1u128 << SECRET_BITS) - 1);
+            let plaintext = (i as u128).wrapping_mul(0x123456789) & ((1u128 << SECRET_BITS) - 1);
 
             let encrypted1 = encrypt(plaintext, &key1);
             let encrypted2 = encrypt(plaintext, &key2);

@@ -35,8 +35,8 @@
 #[cfg(feature = "encryption")]
 use crate::encryption::EncryptionKey;
 use crate::{
-    Case, NameStr, Tnid, TnidName, TnidVariant, UuidLike, data_encoding, name_encoding, utils, v0,
-    v1,
+    data_encoding, name_encoding, utils, v0, v1, Case, NameStr, Tnid, TnidName, TnidVariant,
+    UuidLike,
 };
 
 /// A TNID with runtime-determined name.

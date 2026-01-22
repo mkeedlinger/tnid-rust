@@ -2,31 +2,41 @@ use crate::name_encoding;
 use crate::name_encoding::NameStr;
 use crate::utils;
 
-fn millis_mask(millis_since_epoch: u64) -> u128 {
+/// The mask for the first 28 bits of the 43-bit timestamp.
+pub const TIMESTAMP_FIRST_28_MASK: u64 = 0x0000_07ff_ffff_8000;
+/// The mask for the middle 12 bits of the 43-bit timestamp.
+pub const TIMESTAMP_SECOND_12_MASK: u64 = 0x0000_0000_0000_7ff8;
+/// The mask for the last 3 bits of the 43-bit timestamp.
+pub const TIMESTAMP_LAST_3_MASK: u64 = 0x0000_0000_0000_0007;
+
+/// Distributes the 43-bit millisecond timestamp into its three specific scattered sections
+/// within the 128-bit TNID structure.
+pub fn millis_mask(millis_since_epoch: u64) -> u128 {
     let mut mask = 0u128;
 
-    const FIRST_28_MASK: u64 = 0x0000_07ff_ffff_8000;
-    mask |=
-        ((millis_since_epoch & FIRST_28_MASK) as u128) << (FIRST_28_MASK.leading_zeros() + 64 - 20);
+    mask |= ((millis_since_epoch & TIMESTAMP_FIRST_28_MASK) as u128)
+        << (TIMESTAMP_FIRST_28_MASK.leading_zeros() + 64 - 20);
 
-    const SECOND_12_MASK: u64 = 0x0000_0000_0000_7ff8;
-    mask |= ((millis_since_epoch & SECOND_12_MASK) as u128)
-        << (SECOND_12_MASK.leading_zeros() + 64 - 52);
+    mask |= ((millis_since_epoch & TIMESTAMP_SECOND_12_MASK) as u128)
+        << (TIMESTAMP_SECOND_12_MASK.leading_zeros() + 64 - 52);
 
-    const LAST_3_MASK: u64 = 0x0000_0000_0000_0007;
-    mask |= ((millis_since_epoch & LAST_3_MASK) as u128) << (LAST_3_MASK.leading_zeros() + 64 - 68);
+    mask |= ((millis_since_epoch & TIMESTAMP_LAST_3_MASK) as u128)
+        << (TIMESTAMP_LAST_3_MASK.leading_zeros() + 64 - 68);
 
     mask
 }
 
-fn random_bits_mask(random: u64) -> u128 {
-    const MASK: u128 = 0x00000000_0000_0000_01ff_ffffffffffff;
+/// Mask for the 57 random bits in a V0 TNID.
+pub const RANDOM_MASK: u128 = 0x00000000_0000_0000_01ff_ffffffffffff;
 
+/// Places the random bits into their specific scattered positions for a V0 TNID.
+pub fn random_bits_mask(random: u64) -> u128 {
     let random = random as u128;
 
-    random & MASK
+    random & RANDOM_MASK
 }
 
+/// Creates a 128-bit V0 ID from its component parts.
 pub fn make_from_parts(name: NameStr, epoch_millis: u64, random: u64) -> u128 {
     let mut id = 0u128;
 

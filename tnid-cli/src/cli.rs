@@ -123,17 +123,20 @@ pub enum Cli {
         name: String,
     },
 
+    /// Internal debug and verification commands
+    #[command(subcommand)]
+    Internals(InternalCli),
+}
+
+#[derive(clap::Subcommand)]
+pub enum InternalCli {
     /// Convert a TNID name to its hex encoding
     ///
     /// Examples:
     ///
-    ///   $ tnid encode-name user
+    ///   $ tnid internal encode-name user
     ///
     ///   19a80
-    ///
-    ///   $ tnid encode-name a
-    ///
-    ///   06000
     EncodeName {
         /// The name to encode
         name: String,
@@ -143,15 +146,121 @@ pub enum Cli {
     ///
     /// Examples:
     ///
-    ///   $ tnid decode-name 19a80
+    ///   $ tnid internal decode-name 19a80
     ///
     ///   user
-    ///
-    ///   $ tnid decode-name 06000
-    ///
-    ///   a
     DecodeName {
         /// The hex encoding to decode (5 hex characters)
         name_hex: String,
     },
+
+    /// Manually construct a V0 TNID from parts
+    MakeV0 {
+        /// The TNID name
+        name: String,
+        /// Epoch milliseconds (u64)
+        timestamp: u64,
+        /// Random bits (u64)
+        random: u64,
+    },
+
+    /// Manually construct a V1 TNID from parts
+    MakeV1 {
+        /// The TNID name
+        name: String,
+        /// Random bits (u128 hex)
+        random: String,
+    },
+
+    /// Extract the raw data bits from a TNID
+    ExtractDataBits {
+        /// The TNID to extract from
+        id: String,
+    },
+
+    /// Expand compact data bits to their position in a 128-bit TNID
+    ExpandDataBits {
+        /// Compact data bits (hex)
+        bits: String,
+    },
+
+    /// Extract the secret data bits from a TNID
+    ExtractSecretDataBits {
+        /// The TNID to extract from
+        id: String,
+    },
+
+    /// Expand compact secret data bits to their position in a 128-bit TNID
+    ExpandSecretDataBits {
+        /// Compact secret data bits (hex)
+        bits: String,
+    },
+
+    /// Decode a data string to its raw bits
+    StringToIdData {
+        /// The data string (part after the dot)
+        string: String,
+    },
+
+    /// Encrypt raw 100-bit secret data using FF1
+    EncryptRaw {
+        /// Raw data bits to encrypt (hex)
+        data: String,
+        /// 32-character hex encryption key
+        #[arg(env = KEY_NAME)]
+        key: String,
+    },
+
+    /// Decrypt raw 100-bit secret data using FF1
+    DecryptRaw {
+        /// Raw data bits to decrypt (hex)
+        data: String,
+        /// 32-character hex encryption key
+        #[arg(env = KEY_NAME)]
+        key: String,
+    },
+
+    /// Change the variant of a TNID
+    ChangeVariant {
+        /// The TNID to modify
+        id: String,
+        /// The new variant (0-3)
+        variant: u8,
+    },
+
+    /// Encode a V0 timestamp to its scattered bit positions
+    EncodeV0Timestamp {
+        /// Timestamp in milliseconds since epoch (u64)
+        millis: u64,
+    },
+
+    /// Encode V0 random bits to their scattered bit positions
+    EncodeV0Random {
+        /// Random bits (u64)
+        random: u64,
+    },
+
+    /// Encode V1 random bits to their scattered bit positions
+    EncodeV1Random {
+        /// Random bits (u128 hex)
+        random: String,
+    },
+
+    /// Convert compact data bits to a TNID data string
+    CompactDataToString {
+        /// Compact data bits (hex)
+        bits: String,
+    },
+
+    /// Convert a 128-bit value to a standard UUID string
+    U128ToUuid {
+        /// The u128 value to format (hex)
+        u128_hex: String,
+        /// Use uppercase hex digits (A-F)
+        #[arg(short, long, default_value_t = false)]
+        upper: bool,
+    },
+
+    /// Show all internal constants (masks, mappings, etc.)
+    ShowConstants,
 }

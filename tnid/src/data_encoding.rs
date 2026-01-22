@@ -10,6 +10,7 @@ pub const DATA_CHAR_ENCODING_LEN: u8 = DATA_BIT_NUM / CHAR_BIT_LENGTH;
 /// Number of possible chars requires to represent data chunks
 const ENCODING_CHAR_NUM: u8 = 2u8.pow(CHAR_BIT_LENGTH as u32);
 
+/// Mapping from numeric values to characters for data encoding.
 pub const CHAR_MAPPING: [(u8, u8); ENCODING_CHAR_NUM as usize] = [
     // dash
     (0, b'-'),
@@ -119,6 +120,13 @@ impl std::fmt::Display for DataEncodingError {
 
 impl std::error::Error for DataEncodingError {}
 
+/// Encodes the data portion of a TNID into its string representation.
+///
+/// This function extracts the 102 payload data bits from a 128-bit TNID and encodes
+/// them into a 17-character string using the TNID Data Encoding scheme. This scheme
+/// preserves the sortability of the IDs in their string form.
+///
+/// This is the inverse of [`string_to_id_data`].
 pub fn id_data_to_string(id: u128) -> String {
     let mut s = String::with_capacity(17);
 
@@ -142,7 +150,17 @@ pub fn id_data_to_string(id: u128) -> String {
     s
 }
 
-pub(crate) fn string_to_id_data(s: &str) -> Result<u128, DataEncodingError> {
+/// Decodes a TNID data string to its compact 102-bit representation.
+///
+/// The TNID string representation (`<name>.<data>`) contains a data portion that encodes
+/// 102 bits of payload data. The remaining 26 bits of the 128-bit TNID are reserved for:
+/// - 20 bits: Name (identifies the ID type)
+/// - 6 bits: UUID version (8) and variant (RFC 4122) markers
+///
+/// This function decodes the data string into a `u128` where the lowest 102 bits contain
+/// the payload data. This value is intended to be used with [`expand_data_bits`] to
+/// distribute these bits into their correct positions within the full 128-bit structure.
+pub fn string_to_id_data(s: &str) -> Result<u128, DataEncodingError> {
     // Validate length
     if s.len() != DATA_CHAR_ENCODING_LEN as usize {
         return Err(DataEncodingError::WrongLength(s.len()));
@@ -164,11 +182,19 @@ pub(crate) fn string_to_id_data(s: &str) -> Result<u128, DataEncodingError> {
     Ok(result)
 }
 
-const RIGHT_DATA_SECTION_MASK: u128 = 0x00000000_0000_0000_3fff_ffffffffffff;
-const MIDDLE_DATA_SECTION_MASK: u128 = 0x00000000_0000_0fff_0000_000000000000;
-const LEFT_DATA_SECTION_MASK: u128 = 0x00000fff_ffff_0000_0000_000000000000;
-/// Get all bits except the name and UUID parts
-pub(crate) fn extract_data_bits(id: u128) -> u128 {
+/// Mask for the right-most data section (bits 0-61).
+pub const RIGHT_DATA_SECTION_MASK: u128 = 0x00000000_0000_0000_3fff_ffffffffffff;
+/// Mask for the middle data section (bits 64-75).
+pub const MIDDLE_DATA_SECTION_MASK: u128 = 0x00000000_0000_0fff_0000_000000000000;
+/// Mask for the left-most data section (bits 80-107).
+pub const LEFT_DATA_SECTION_MASK: u128 = 0x00000fff_ffff_0000_0000_000000000000;
+
+/// Extracts all data bits from a TNID, excluding the name and UUID metadata.
+///
+/// Compacts the bits from the three sections into a single 102-bit value.
+/// The returned `u128` will have its lowest 102 bits populated with data,
+/// and the highest 26 bits set to zero.
+pub fn extract_data_bits(id: u128) -> u128 {
     let extracted = id & RIGHT_DATA_SECTION_MASK;
 
     const BETWEEN_MIDDLE_RIGHT: i32 = 2;
@@ -178,8 +204,12 @@ pub(crate) fn extract_data_bits(id: u128) -> u128 {
     extracted | ((id & LEFT_DATA_SECTION_MASK) >> BETWEEN_LEFT_MIDDLE)
 }
 
-/// Expand compacted data bits back into their positions (inverse of extract_data_bits)
-pub(crate) fn expand_data_bits(compact_bits: u128) -> u128 {
+/// Expands compacted data bits back into their positions within a 128-bit TNID.
+///
+/// This is the inverse of [`extract_data_bits`].
+/// `compact_bits` should have its lowest 102 bits populated with data,
+/// and the highest 26 bits set to zero (though higher bits are masked out anyway).
+pub fn expand_data_bits(compact_bits: u128) -> u128 {
     // Right section stays in place
     let expanded = compact_bits & RIGHT_DATA_SECTION_MASK;
 
