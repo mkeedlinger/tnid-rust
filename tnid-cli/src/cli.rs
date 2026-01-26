@@ -172,27 +172,27 @@ pub enum InternalCli {
         random: String,
     },
 
-    /// Extract the raw data bits from a TNID
+    /// Extract the Data bits (102 bits) from a TNID
     ExtractDataBits {
         /// The TNID to extract from
         id: String,
     },
 
-    /// Expand compact data bits to their position in a 128-bit TNID
+    /// Expand compact Data bits (102 bits) to their position in a 128-bit TNID
     ExpandDataBits {
-        /// Compact data bits (hex)
+        /// Compact Data bits (hex)
         bits: String,
     },
 
-    /// Extract the secret data bits from a TNID
+    /// Extract the Payload bits (100 bits) from a TNID
     ExtractSecretDataBits {
         /// The TNID to extract from
         id: String,
     },
 
-    /// Expand compact secret data bits to their position in a 128-bit TNID
+    /// Expand compact Payload bits (100 bits) to their position in a 128-bit TNID
     ExpandSecretDataBits {
-        /// Compact secret data bits (hex)
+        /// Compact Payload bits (hex)
         bits: String,
     },
 
@@ -202,18 +202,18 @@ pub enum InternalCli {
         string: String,
     },
 
-    /// Encrypt raw 100-bit secret data using FF1
+    /// Encrypt raw Payload bits (100 bits) using FF1
     EncryptRaw {
-        /// Raw data bits to encrypt (hex)
+        /// Payload bits to encrypt (hex)
         data: String,
         /// 32-character hex encryption key
         #[arg(env = KEY_NAME)]
         key: String,
     },
 
-    /// Decrypt raw 100-bit secret data using FF1
+    /// Decrypt raw Payload bits (100 bits) using FF1
     DecryptRaw {
-        /// Raw data bits to decrypt (hex)
+        /// Payload bits to decrypt (hex)
         data: String,
         /// 32-character hex encryption key
         #[arg(env = KEY_NAME)]
@@ -246,9 +246,9 @@ pub enum InternalCli {
         random: String,
     },
 
-    /// Convert compact data bits to a TNID data string
+    /// Convert compact Data bits (102 bits) to a TNID data string
     CompactDataToString {
-        /// Compact data bits (hex)
+        /// Compact Data bits (hex)
         bits: String,
     },
 

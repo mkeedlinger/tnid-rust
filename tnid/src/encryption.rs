@@ -23,7 +23,7 @@
 //! # How It Works
 //!
 //! The encryption uses [Format-Preserving Encryption (FPE)](https://en.wikipedia.org/wiki/Format-preserving_encryption)
-//! with AES-128 in FF1 mode. This encrypts the data bits while preserving:
+//! with AES-128 in FF1 mode. This encrypts the Payload bits (100 bits) while preserving:
 //! - The TNID name (unchanged)
 //! - The UUID version/variant bits (valid UUIDv8)
 //! - The overall 128-bit structure
@@ -253,21 +253,21 @@ impl From<[u8; 16]> for EncryptionKey {
     }
 }
 
-/// Mask for the right-most secret data section (bits 0-51).
+/// Mask for the right-most Payload bits section (bits 0-51).
 pub const RIGHT_SECRET_DATA_SECTION_MASK: u128 = 0x00000000_0000_0000_0fff_ffffffffffff;
-/// Mask for the middle secret data section (bits 64-75).
+/// Mask for the middle Payload bits section (bits 64-75).
 pub const MIDDLE_SECRET_DATA_SECTION_MASK: u128 = 0x00000000_0000_0fff_0000_000000000000;
-/// Mask for the left-most secret data section (bits 80-107).
+/// Mask for the left-most Payload bits section (bits 80-107).
 pub const LEFT_SECRET_DATA_SECTION_MASK: u128 = 0x00000fff_ffff_0000_0000_000000000000;
 
-/// Mask for all secret data bits that are encrypted/decrypted.
+/// Mask for all Payload bits (100 bits) that are encrypted/decrypted.
 pub const COMPLETE_SECRET_DATA_MASK: u128 = RIGHT_SECRET_DATA_SECTION_MASK
     | MIDDLE_SECRET_DATA_SECTION_MASK
     | LEFT_SECRET_DATA_SECTION_MASK;
 
-/// Extract secret data bits (excludes name, UUID version/variant, and TNID variant).
+/// Extracts Payload bits (excludes Name bits, UUID-specific bits, and TNID Variant bits).
 ///
-/// Compacts the bits from the three sections into a single 100-bit value.
+/// Compacts the Payload bits from the three sections into a single 100-bit value.
 /// The returned `u128` will have its lowest 100 bits populated with data,
 /// and the highest 28 bits set to zero.
 pub fn extract_secret_data_bits(id: u128) -> u128 {
@@ -280,10 +280,10 @@ pub fn extract_secret_data_bits(id: u128) -> u128 {
     extracted | ((id & LEFT_SECRET_DATA_SECTION_MASK) >> BETWEEN_LEFT_MIDDLE)
 }
 
-/// Expand compacted secret data bits back into their positions.
+/// Expands compacted Payload bits back into their positions.
 ///
 /// This is the inverse of [`extract_secret_data_bits`].
-/// `bits` should have its lowest 100 bits populated with data,
+/// `bits` should have its lowest 100 bits populated with Payload data,
 /// and the highest 28 bits set to zero (though higher bits are masked out anyway).
 pub fn expand_secret_data_bits(bits: u128) -> u128 {
     // Right section stays in place
@@ -320,12 +320,12 @@ fn hex_digits_to_u128(digits: Vec<u16>) -> u128 {
     result
 }
 
-/// Encrypts raw 100-bit secret data using FF1.
+/// Encrypts raw 100-bit Payload data using FF1.
 ///
-/// `id_secret_data` must have its lowest 100 bits populated with data to be encrypted.
+/// `id_secret_data` must have its lowest 100 bits populated with Payload data to be encrypted.
 /// The highest 28 bits are ignored.
 ///
-/// Returns a `u128` where the lowest 100 bits contain the encrypted data,
+/// Returns a `u128` where the lowest 100 bits contain the encrypted Payload data,
 /// and the highest 28 bits are zero.
 pub fn encrypt(id_secret_data: u128, key: &EncryptionKey) -> u128 {
     // Mask to only encrypt the lower 100 bits
@@ -343,12 +343,12 @@ pub fn encrypt(id_secret_data: u128, key: &EncryptionKey) -> u128 {
     hex_digits_to_u128(encrypted.into())
 }
 
-/// Decrypts raw 100-bit secret data using FF1.
+/// Decrypts raw 100-bit Payload data using FF1.
 ///
-/// `id_secret_data` must have its lowest 100 bits populated with data to be decrypted.
+/// `id_secret_data` must have its lowest 100 bits populated with Payload data to be decrypted.
 /// The highest 28 bits are ignored.
 ///
-/// Returns a `u128` where the lowest 100 bits contain the decrypted data,
+/// Returns a `u128` where the lowest 100 bits contain the decrypted Payload data,
 /// and the highest 28 bits are zero.
 pub fn decrypt(id_secret_data: u128, key: &EncryptionKey) -> u128 {
     // Mask to only decrypt the lower 100 bits
@@ -379,16 +379,16 @@ pub fn encrypt_id_v0_to_v1(id: u128, key: &EncryptionKey) -> Result<u128, Encryp
         }
     }
 
-    // Extract only the secret data bits (100 bits, excludes TNID variant)
+    // Extract only the Payload bits (100 bits, excludes TNID Variant bits)
     let secret_data = extract_secret_data_bits(id);
 
-    // Encrypt the secret data
+    // Encrypt the Payload
     let encrypted_data = encrypt(secret_data, key);
 
     // Expand back to proper bit positions
     let expanded = expand_secret_data_bits(encrypted_data);
 
-    // Preserve name and UUID metadata, replace data bits with encrypted version
+    // Preserve Name bits and UUID-specific bits, replace Payload bits with encrypted version
     let id = (id & !COMPLETE_SECRET_DATA_MASK) | expanded;
 
     // Change variant from V0 to V1
@@ -410,16 +410,16 @@ pub fn decrypt_id_v1_to_v0(id: u128, key: &EncryptionKey) -> Result<u128, Encryp
         }
     }
 
-    // Extract only the secret data bits (100 bits, excludes TNID variant)
+    // Extract only the Payload bits (100 bits, excludes TNID Variant bits)
     let encrypted_data = extract_secret_data_bits(id);
 
-    // Decrypt the secret data
+    // Decrypt the Payload
     let decrypted_data = decrypt(encrypted_data, key);
 
     // Expand back to proper bit positions
     let expanded = expand_secret_data_bits(decrypted_data);
 
-    // Preserve name and UUID metadata, replace data bits with decrypted version
+    // Preserve Name bits and UUID-specific bits, replace Payload bits with decrypted version
     let id = (id & !COMPLETE_SECRET_DATA_MASK) | expanded;
 
     // Change variant from V1 to V0
@@ -512,7 +512,7 @@ mod tests_release {
             .map(|plaintext| encrypt(plaintext, &key))
             .collect();
 
-        // Check each bit position in the 100-bit secret data
+        // Check each bit position in the 100 Payload bits
         for bit_pos in 0..SECRET_BITS {
             let ones = count_ones_at_bit(&encrypted_samples, bit_pos);
             let ratio = ones as f64 / SAMPLE_COUNT as f64;
@@ -934,12 +934,12 @@ mod tests_release {
     // HELPER FUNCTION
     // ==================================================================================
     //
-    // Simulates extracting secret data bits from a V0 TNID structure.
+    // Simulates extracting Payload bits from a V0 TNID structure.
     // This creates a realistic bit pattern matching what `extract_secret_data_bits`
     // would produce from an actual V0 TNID.
     // ==================================================================================
 
-    /// Simulates the secret data portion of a V0 TNID given timestamp and random bits.
+    /// Simulates the Payload bits of a V0 TNID given timestamp and random bits.
     ///
     /// V0 layout:
     /// - 43 bits: milliseconds since epoch

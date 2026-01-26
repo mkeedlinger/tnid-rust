@@ -1,7 +1,7 @@
 /// Number of bits each char decodes to
 pub const CHAR_BIT_LENGTH: u8 = 6;
 
-/// Number of data bits in a TNID
+/// Number of Data bits in a TNID (TNID Variant bits + Payload bits)
 pub const DATA_BIT_NUM: u8 = 102;
 
 /// Number of chars needed to encode all the [`DATA_BIT_NUM`] bits
@@ -122,7 +122,7 @@ impl std::error::Error for DataEncodingError {}
 
 /// Encodes the data portion of a TNID into its string representation.
 ///
-/// This function extracts the 102 payload data bits from a 128-bit TNID and encodes
+/// This function extracts the 102 Data bits from a 128-bit TNID and encodes
 /// them into a 17-character string using the TNID Data Encoding scheme. This scheme
 /// preserves the sortability of the IDs in their string form.
 ///
@@ -153,12 +153,12 @@ pub fn id_data_to_string(id: u128) -> String {
 /// Decodes a TNID data string to its compact 102-bit representation.
 ///
 /// The TNID string representation (`<name>.<data>`) contains a data portion that encodes
-/// 102 bits of payload data. The remaining 26 bits of the 128-bit TNID are reserved for:
-/// - 20 bits: Name (identifies the ID type)
-/// - 6 bits: UUID version (8) and variant (RFC 4122) markers
+/// 102 Data bits. The remaining 26 bits of the 128-bit TNID are reserved for:
+/// - 20 bits: Name bits (identifies the ID type)
+/// - 6 bits: UUID-specific bits (version and variant markers)
 ///
 /// This function decodes the data string into a `u128` where the lowest 102 bits contain
-/// the payload data. This value is intended to be used with [`expand_data_bits`] to
+/// the Data bits. This value is intended to be used with [`expand_data_bits`] to
 /// distribute these bits into their correct positions within the full 128-bit structure.
 pub fn string_to_id_data(s: &str) -> Result<u128, DataEncodingError> {
     // Validate length
