@@ -1,4 +1,6 @@
-use crate::{Case, TnidVariant};
+use crate::Case;
+#[cfg(any(feature = "encryption", feature = "internals"))]
+use crate::TnidVariant;
 
 /// Mask for the UUID version (8) and variant (RFC 4122) bits.
 pub const UUID_V8_MASK: u128 = 0x00000000_0000_8000_8000_000000000000;
@@ -14,6 +16,7 @@ pub fn uuid_and_variant_mask(tnid_variant: u8) -> u128 {
 }
 
 /// Changes the TNID variant bits in a 128-bit ID.
+#[cfg(any(feature = "encryption", feature = "internals"))]
 pub fn change_variant(id: u128, to_variant: TnidVariant) -> u128 {
     // Clear the old variant bits (bits 60-61)
     let variant_mask = 0b11u128 << 60;
@@ -75,6 +78,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(any(feature = "encryption", feature = "internals"))]
     fn change_variant_changes_only_variant_bits() {
         let id: u128 = 0x0123_4567_89ab_cdef_0123_4567_89ab_cdef;
         let v0 = change_variant(id, TnidVariant::V0);
