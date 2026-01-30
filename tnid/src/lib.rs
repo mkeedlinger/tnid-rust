@@ -870,6 +870,48 @@ impl<Name: TnidName> std::fmt::Debug for Tnid<Name> {
     }
 }
 
+impl<Name: TnidName> std::str::FromStr for Tnid<Name> {
+    type Err = ParseTnidError;
+
+    /// Parses a TNID from either TNID string format or UUID hex format (auto-detected).
+    ///
+    /// # Format Detection
+    ///
+    /// - Strings of 19-22 characters containing a `.` are parsed as TNID strings
+    /// - Strings of exactly 36 characters are parsed as UUID hex strings
+    /// - Other lengths return an error
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{Tnid, TnidName, NameStr};
+    ///
+    /// struct User;
+    /// impl TnidName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// // Parse TNID string format
+    /// let id: Tnid<User> = "user.Br2flcNDfF6LYICnT".parse().unwrap();
+    ///
+    /// // Parse UUID hex format
+    /// let id: Tnid<User> = "d6157329-4640-8e30-9f8a-b5c7d2e1f0a3".parse().unwrap();
+    /// ```
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        const MIN_TNID_LEN: usize =
+            name_encoding::NAME_MIN_CHARS + 1 + data_encoding::DATA_CHAR_ENCODING_LEN as usize;
+        const MAX_TNID_LEN: usize =
+            name_encoding::NAME_MAX_CHARS + 1 + data_encoding::DATA_CHAR_ENCODING_LEN as usize;
+        const UUID_LEN: usize = 36;
+
+        match s.len() {
+            MIN_TNID_LEN..=MAX_TNID_LEN if s.contains('.') => Self::parse_tnid_string(s),
+            UUID_LEN => Self::parse_uuid_string(s),
+            len => Err(ParseTnidError::InvalidLength(len)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
