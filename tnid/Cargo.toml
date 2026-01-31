@@ -10,6 +10,7 @@ readme = "README.md"
 
 [dependencies]
 aes = { version = "0.8.4", optional = true }
+aho-corasick = { version = "1", optional = true }
 fpe = { version = "0.6.1", optional = true }
 rand = { version = "0.8.5", optional = true }
 time = { version = "0.3.36", optional = true }
@@ -27,6 +28,7 @@ bincode = "1"
 [features]
 default = ["time", "rand"]
 encryption = ["dep:aes", "dep:fpe"]
+filter = ["dep:aho-corasick", "time", "rand"]
 time = ["dep:time"]
 rand = ["dep:rand"]
 uuid = ["dep:uuid"]

@@ -12,6 +12,8 @@ mod data_encoding;
 pub mod dynamic_tnid;
 #[cfg(feature = "encryption")]
 pub mod encryption;
+#[cfg(feature = "filter")]
+pub mod filter;
 mod name_encoding;
 #[cfg(feature = "serde")]
 mod serde_impl;
@@ -493,6 +495,14 @@ impl<Name: TnidName> Tnid<Name> {
         )
     }
 
+    /// Returns just the data portion of the TNID string (17 characters).
+    ///
+    /// This is the encoded data after the dot in the full TNID string format.
+    /// Useful for inspecting or filtering the data portion independently.
+    pub fn data_string(&self) -> String {
+        data_encoding::id_data_to_string(self.id)
+    }
+
     /// Returns the TNID variant.
     ///
     /// # Examples
@@ -815,6 +825,204 @@ impl<Name: TnidName> Tnid<Name> {
             id,
         })
     }
+
+    /// Generates a new V0 TNID with no blocklist matches in its data string.
+    ///
+    /// This function generates time-ordered TNIDs (like [`Self::new_v0`]) while ensuring
+    /// the encoded data portion doesn't contain any words from the blocklist.
+    ///
+    /// # Algorithm
+    ///
+    /// 1. Generate a V0 TNID with the current timestamp and random bits
+    /// 2. Check the data string for blocklist matches
+    /// 3. If a match is found:
+    ///    - If it touches the random portion (char 7+): regenerate random bits
+    ///    - If it's entirely in the timestamp portion (chars 0-6): bump timestamp by 1ms
+    /// 4. Repeat until clean or max iterations reached
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FilterError::MaxIterationsExceeded`] if unable to generate a clean ID
+    /// after many attempts. This typically indicates the blocklist is too restrictive.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tnid::{Tnid, TnidName, NameStr};
+    /// use tnid::filter::Blocklist;
+    ///
+    /// struct User;
+    /// impl TnidName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// let blocklist = Blocklist::new(&["TACO", "FOO"]);
+    /// let id = Tnid::<User>::new_v0_filtered(&blocklist).unwrap();
+    ///
+    /// // The data portion won't contain "TACO" or "FOO"
+    /// assert!(!blocklist.contains_match(&id.data_string()));
+    /// ```
+    #[cfg(feature = "filter")]
+    pub fn new_v0_filtered(blocklist: &filter::Blocklist) -> Result<Self, filter::FilterError> {
+        // Start from max(current_time, last_safe_timestamp) to avoid re-discovering bad windows
+        let mut timestamp = filter::get_starting_timestamp();
+
+        for _ in 0..filter::MAX_V0_ITERATIONS {
+            let random: u64 = rand::random();
+            let id = Self::new_v0_with_parts(timestamp, random);
+            let data = id.data_string();
+
+            match filter::find_first_match(blocklist, &data) {
+                None => {
+                    // Record this timestamp so future calls can skip past any bad windows we found
+                    filter::record_safe_timestamp(timestamp);
+                    return Ok(id);
+                }
+                Some((start, len)) => {
+                    if !filter::match_touches_random_portion(start, len) {
+                        // Match is entirely in timestamp portion
+                        // Bump enough to change the rightmost char of the match
+                        let rightmost_char = start + len - 1;
+                        timestamp += filter::timestamp_bump_for_char(rightmost_char);
+                    }
+                    // Otherwise just loop to regenerate random
+                }
+            }
+        }
+
+        Err(filter::FilterError::MaxIterationsExceeded {
+            iterations: filter::MAX_V0_ITERATIONS,
+        })
+    }
+
+    /// Generates a new V1 TNID with no blocklist matches in its data string.
+    ///
+    /// This function generates high-entropy TNIDs (like [`Self::new_v1`]) while ensuring
+    /// the encoded data portion doesn't contain any words from the blocklist.
+    ///
+    /// Since V1 TNIDs are entirely random (100 bits of entropy), the algorithm simply
+    /// regenerates until a clean ID is found.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FilterError::MaxIterationsExceeded`] if unable to generate a clean ID
+    /// after many attempts. This is extremely unlikely with a reasonable blocklist.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tnid::{Tnid, TnidName, NameStr};
+    /// use tnid::filter::Blocklist;
+    ///
+    /// struct User;
+    /// impl TnidName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// let blocklist = Blocklist::new(&["TACO", "FOO"]);
+    /// let id = Tnid::<User>::new_v1_filtered(&blocklist).unwrap();
+    ///
+    /// // The data portion won't contain "TACO" or "FOO"
+    /// assert!(!blocklist.contains_match(&id.data_string()));
+    /// ```
+    #[cfg(feature = "filter")]
+    pub fn new_v1_filtered(blocklist: &filter::Blocklist) -> Result<Self, filter::FilterError> {
+        for _ in 0..filter::MAX_V1_ITERATIONS {
+            let id = Self::new_v1();
+            let data = id.data_string();
+
+            if !blocklist.contains_match(&data) {
+                return Ok(id);
+            }
+        }
+
+        Err(filter::FilterError::MaxIterationsExceeded {
+            iterations: filter::MAX_V1_ITERATIONS,
+        })
+    }
+
+    /// Generates a V0 TNID where both the V0 and its encrypted V1 are clean.
+    ///
+    /// This is useful when you store V0 TNIDs internally (for time-ordering benefits)
+    /// but expose encrypted V1 TNIDs externally (to hide timestamps). This function
+    /// ensures neither form contains blocklisted words.
+    ///
+    /// # Algorithm
+    ///
+    /// 1. Generate a V0 TNID with the current timestamp and random bits
+    /// 2. Encrypt to V1
+    /// 3. Check both data strings for blocklist matches
+    /// 4. If V0 has a match in the timestamp portion: bump timestamp
+    /// 5. If either has a match in the random portion: regenerate random
+    /// 6. Repeat until both are clean or max iterations reached
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FilterError::MaxIterationsExceeded`] if unable to generate a clean ID
+    /// after many attempts, or [`FilterError::EncryptionError`] if encryption fails.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tnid::{Tnid, TnidName, NameStr};
+    /// use tnid::filter::Blocklist;
+    ///
+    /// struct User;
+    /// impl TnidName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// let key = [1u8; 16];
+    /// let blocklist = Blocklist::new(&["TACO", "FOO"]);
+    /// let v0 = Tnid::<User>::new_v0_filtered_for_encryption(key, &blocklist).unwrap();
+    ///
+    /// // Both V0 and encrypted V1 are clean
+    /// assert!(!blocklist.contains_match(&v0.data_string()));
+    /// let v1 = v0.encrypt_v0_to_v1(key).unwrap();
+    /// assert!(!blocklist.contains_match(&v1.data_string()));
+    /// ```
+    #[cfg(all(feature = "filter", feature = "encryption"))]
+    pub fn new_v0_filtered_for_encryption(
+        key: impl Into<encryption::EncryptionKey> + Copy,
+        blocklist: &filter::Blocklist,
+    ) -> Result<Self, filter::FilterError> {
+        // Start from max(current_time, last_safe_timestamp) to avoid re-discovering bad windows
+        let mut timestamp = filter::get_starting_timestamp();
+
+        for _ in 0..filter::MAX_ENCRYPTION_ITERATIONS {
+            let random: u64 = rand::random();
+            let v0 = Self::new_v0_with_parts(timestamp, random);
+            let v0_data = v0.data_string();
+
+            // Check V0 first
+            if let Some((start, len)) = filter::find_first_match(blocklist, &v0_data) {
+                if !filter::match_touches_random_portion(start, len) {
+                    // Match is entirely in V0's timestamp portion, must bump
+                    let rightmost_char = start + len - 1;
+                    timestamp += filter::timestamp_bump_for_char(rightmost_char);
+                }
+                // Otherwise regenerate random (continue loop)
+                continue;
+            }
+
+            // V0 is clean, now check encrypted V1
+            let v1 = v0.encrypt_v0_to_v1(key)?;
+            let v1_data = v1.data_string();
+
+            if !blocklist.contains_match(&v1_data) {
+                // Both are clean!
+                filter::record_safe_timestamp(timestamp);
+                return Ok(v0);
+            }
+            // V1 has a match - since V1 is all random-looking after encryption,
+            // regenerating the V0's random bits will produce a completely different V1
+            // (continue loop)
+        }
+
+        Err(filter::FilterError::MaxIterationsExceeded {
+            iterations: filter::MAX_ENCRYPTION_ITERATIONS,
+        })
+    }
 }
 
 /// Internal functions exposed for advanced usage behind the `internals` feature.
@@ -1085,5 +1293,78 @@ mod tests {
             id.as_u128() > normal_id.as_u128(),
             "pre-epoch ID should sort after normal ID due to wrapping"
         );
+    }
+
+    #[cfg(feature = "filter")]
+    #[test]
+    fn new_v0_filtered_produces_clean_ids() {
+        let blocklist = filter::Blocklist::new(&["TACO", "FOO", "BAR"]);
+
+        for _ in 0..100 {
+            let id = Tnid::<TestId>::new_v0_filtered(&blocklist).unwrap();
+            let data = id.data_string();
+            assert!(
+                !blocklist.contains_match(&data),
+                "filtered ID should not contain blocklist words: {data}"
+            );
+        }
+    }
+
+    #[cfg(feature = "filter")]
+    #[test]
+    fn new_v1_filtered_produces_clean_ids() {
+        let blocklist = filter::Blocklist::new(&["TACO", "FOO", "BAR"]);
+
+        for _ in 0..100 {
+            let id = Tnid::<TestId>::new_v1_filtered(&blocklist).unwrap();
+            let data = id.data_string();
+            assert!(
+                !blocklist.contains_match(&data),
+                "filtered ID should not contain blocklist words: {data}"
+            );
+        }
+    }
+
+    #[cfg(all(feature = "filter", feature = "encryption"))]
+    #[test]
+    fn new_v0_filtered_for_encryption_produces_clean_ids() {
+        let key = [1u8; 16];
+        let blocklist = filter::Blocklist::new(&["TACO", "FOO", "BAR"]);
+
+        for _ in 0..50 {
+            let v0 = Tnid::<TestId>::new_v0_filtered_for_encryption(key, &blocklist).unwrap();
+            let v0_data = v0.data_string();
+            assert!(
+                !blocklist.contains_match(&v0_data),
+                "V0 should not contain blocklist words: {v0_data}"
+            );
+
+            let v1 = v0.encrypt_v0_to_v1(key).unwrap();
+            let v1_data = v1.data_string();
+            assert!(
+                !blocklist.contains_match(&v1_data),
+                "encrypted V1 should not contain blocklist words: {v1_data}"
+            );
+        }
+    }
+
+    #[cfg(feature = "filter")]
+    #[test]
+    fn filtered_with_empty_blocklist_succeeds() {
+        let blocklist = filter::Blocklist::new::<&str>(&[]);
+
+        let v0 = Tnid::<TestId>::new_v0_filtered(&blocklist);
+        assert!(v0.is_ok());
+
+        let v1 = Tnid::<TestId>::new_v1_filtered(&blocklist);
+        assert!(v1.is_ok());
+    }
+
+    #[cfg(feature = "filter")]
+    #[test]
+    fn data_string_returns_17_chars() {
+        let id: Tnid<TestId> = Tnid::new_v0_with_parts(1_700_000_000_000, 42);
+        let data = id.data_string();
+        assert_eq!(data.len(), 17);
     }
 }
