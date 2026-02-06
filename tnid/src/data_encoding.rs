@@ -86,6 +86,7 @@ pub const CHAR_MAPPING: [(u8, u8); ENCODING_CHAR_NUM as usize] = [
 /// Returns `true` if the given byte is a valid TNID data encoding character.
 ///
 /// The data encoding alphabet is: `-0-9A-Z_a-z` (64 characters).
+#[cfg(feature = "filter")]
 pub fn is_valid_data_char(b: u8) -> bool {
     CHAR_MAPPING.iter().any(|(_, c)| *c == b)
 }
