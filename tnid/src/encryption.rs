@@ -297,10 +297,10 @@ fn u128_to_hex_digits(data: u128) -> Vec<u16> {
     hex_digits
 }
 
-fn hex_digits_to_u128(digits: Vec<u16>) -> u128 {
+fn hex_digits_to_u128(digits: &[u16]) -> u128 {
     let mut result = 0u128;
     for digit in digits {
-        result = (result << 4) | (digit as u128);
+        result = (result << 4) | (*digit as u128);
     }
     result
 }
@@ -325,7 +325,8 @@ pub fn encrypt(id_secret_data: u128, key: &EncryptionKey) -> u128 {
         .encrypt(&[], &numeral_string)
         .expect("string is in required radix");
 
-    hex_digits_to_u128(encrypted.into())
+    let encrypted_digits: Vec<u16> = encrypted.into();
+    hex_digits_to_u128(&encrypted_digits)
 }
 
 /// Decrypts raw 100-bit Payload data using FF1.
@@ -348,7 +349,8 @@ pub fn decrypt(id_secret_data: u128, key: &EncryptionKey) -> u128 {
         .decrypt(&[], &numeral_string)
         .expect("string is in required radix");
 
-    hex_digits_to_u128(decrypted.into())
+    let decrypted_digits: Vec<u16> = decrypted.into();
+    hex_digits_to_u128(&decrypted_digits)
 }
 
 /// Encrypts a V0 TNID to V1, hiding timestamp information.
