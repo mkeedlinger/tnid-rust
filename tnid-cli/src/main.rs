@@ -77,7 +77,9 @@ fn handle_internal(cmd: InternalCli) {
                     std::process::exit(1);
                 }
             };
-            let id = DynamicTnid::new_v0_with_parts(name_str, timestamp, random);
+            let timestamp_val = parse_hex_u128(&timestamp) as u64;
+            let random_val = parse_hex_u128(&random) as u64;
+            let id = DynamicTnid::new_v0_with_parts(name_str, timestamp_val, random_val);
             println!("{}", id.to_tnid_string());
         }
 
@@ -174,12 +176,14 @@ fn handle_internal(cmd: InternalCli) {
         }
 
         InternalCli::EncodeV0Timestamp { millis } => {
-            let mask = internals::v0_millis_mask(millis);
+            let millis_val = parse_hex_u128(&millis) as u64;
+            let mask = internals::v0_millis_mask(millis_val);
             println!("0x{:032x}", mask);
         }
 
         InternalCli::EncodeV0Random { random } => {
-            let mask = internals::v0_random_bits_mask(random);
+            let random_val = parse_hex_u128(&random) as u64;
+            let mask = internals::v0_random_bits_mask(random_val);
             println!("0x{:032x}", mask);
         }
 

@@ -158,10 +158,10 @@ pub enum InternalCli {
     MakeV0 {
         /// The TNID name
         name: String,
-        /// Epoch milliseconds (u64)
-        timestamp: u64,
-        /// Random bits (u64)
-        random: u64,
+        /// Epoch milliseconds (hex)
+        timestamp: String,
+        /// Random bits (hex)
+        random: String,
     },
 
     /// Manually construct a V1 TNID from parts
@@ -230,14 +230,14 @@ pub enum InternalCli {
 
     /// Encode a V0 timestamp to its scattered bit positions
     EncodeV0Timestamp {
-        /// Timestamp in milliseconds since epoch (u64)
-        millis: u64,
+        /// Timestamp in milliseconds since epoch (hex)
+        millis: String,
     },
 
     /// Encode V0 random bits to their scattered bit positions
     EncodeV0Random {
-        /// Random bits (u64)
-        random: u64,
+        /// Random bits (hex)
+        random: String,
     },
 
     /// Encode V1 random bits to their scattered bit positions
