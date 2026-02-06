@@ -2,8 +2,12 @@
 name = "tnid-cli"
 version = "0.1.1"
 edition = "2024"
-description = "A CLI for working with TNIDs"
+description = "CLI tool for working with TNIDs"
 license = "MIT"
+repository = "https://github.com/mkeedlinger/tnid-rust"
+readme = "README.md"
+keywords = ["tnid", "uuid", "id", "cli"]
+categories = ["command-line-utilities"]
 
 [[bin]]
 name = "tnid"
