@@ -124,6 +124,7 @@ delete_post(post_id);  // Works!
 |---------|---------|-------|-------------|
 | `time` | ✓ | stable | Time-based v0 TNID generation (like UUIDv7) |
 | `rand` | ✓ | stable | Random v1 TNID generation (like UUIDv4) |
+| `filter` | | beta | Generate TNIDs that don't contain blocklisted substrings |
 | `encryption` | | beta | Encrypt v0 to v1 to hide timestamps from clients, decrypt on the backend |
 | `uuid` | | stable | Convert to/from the `uuid` crate's `Uuid` type |
 | `serde` | | alpha | `serde::Serialize` / `serde::Deserialize` for `Tnid<Name>`, `DynamicTnid`, `UuidLike` |
