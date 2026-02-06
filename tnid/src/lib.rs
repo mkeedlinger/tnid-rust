@@ -1,4 +1,120 @@
-#![doc = include_str!("../README.md")]
+//! UUID-compatible IDs with names and compile-time type safety.
+//!
+//! TNIDs are UUIDv8-compatible identifiers that include a human-readable name
+//! and can be strictly typed at compile time. `Tnid<User>` and `Tnid<Post>` are
+//! distinct types, so accidentally passing one where the other is expected is a
+//! compile error.
+//!
+//! # Quick Start
+//!
+//! ```rust
+//! use tnid::{NameStr, Tnid, TnidName};
+//!
+//! struct User;
+//! impl TnidName for User {
+//!     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+//! }
+//!
+//! // Time-ordered (v0) - sorts by creation time, like UUIDv7
+//! let id = Tnid::<User>::new_v0();
+//!
+//! // High-entropy (v1) - maximum randomness, like UUIDv4
+//! let id = Tnid::<User>::new_v1();
+//! ```
+//!
+//! # String Representations
+//!
+//! Every TNID has two string forms:
+//!
+//! ```rust
+//! # use tnid::{Case, NameStr, Tnid, TnidName};
+//! # struct Post;
+//! # impl TnidName for Post {
+//! #     const ID_NAME: NameStr<'static> = NameStr::new_const("post");
+//! # }
+//! let id = Tnid::<Post>::new_v0();
+//!
+//! // TNID string - human-readable, sortable, unambiguous
+//! let tnid_str = id.to_tnid_string();
+//! // e.g. "post.Br2flcNDfF6LYICnT"
+//!
+//! // UUID hex string - for databases and APIs expecting UUIDs
+//! let uuid_str = id.to_uuid_string(Case::Lower);
+//! // e.g. "cab1952a-f09d-86d9-928e-96ea03dc6af3"
+//! ```
+//!
+//! Time-ordered IDs sort correctly in both representations:
+//!
+//! ```rust
+//! # use tnid::{NameStr, Tnid, TnidName};
+//! # struct Post;
+//! # impl TnidName for Post {
+//! #     const ID_NAME: NameStr<'static> = NameStr::new_const("post");
+//! # }
+//! let id1 = Tnid::<Post>::new_v0();
+//! std::thread::sleep(std::time::Duration::from_millis(10));
+//! let id2 = Tnid::<Post>::new_v0();
+//!
+//! assert!(id1.to_tnid_string() < id2.to_tnid_string());
+//! assert!(id1.as_u128() < id2.as_u128());
+//! ```
+//!
+//! # Parsing
+//!
+//! ```rust
+//! # use tnid::{NameStr, Tnid, TnidName};
+//! # #[derive(PartialEq)]
+//! # struct Post;
+//! # impl TnidName for Post {
+//! #     const ID_NAME: NameStr<'static> = NameStr::new_const("post");
+//! # }
+//! // From a TNID string
+//! let id = Tnid::<Post>::new_v0();
+//! let parsed = Tnid::<Post>::parse_tnid_string(&id.to_tnid_string()).unwrap();
+//! assert_eq!(id, parsed);
+//!
+//! // From a UUID string
+//! let parsed = Tnid::<Post>::parse_uuid_string(&id.to_uuid_string(tnid::Case::Lower)).unwrap();
+//! assert_eq!(id, parsed);
+//!
+//! // From a raw u128
+//! let parsed = Tnid::<Post>::from_u128(id.as_u128()).unwrap();
+//! assert_eq!(id, parsed);
+//! ```
+//!
+//! # Type Safety
+//!
+//! ```rust,compile_fail
+//! # use tnid::{NameStr, Tnid, TnidName};
+//! struct User;
+//! impl TnidName for User {
+//!     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+//! }
+//!
+//! struct Post;
+//! impl TnidName for Post {
+//!     const ID_NAME: NameStr<'static> = NameStr::new_const("post");
+//! }
+//!
+//! fn delete_user(id: Tnid<User>) { /* ... */ }
+//!
+//! let post_id = Tnid::<Post>::new_v0();
+//! delete_user(post_id); // Compile error: expected Tnid<User>, got Tnid<Post>
+//! ```
+//!
+//! # Features
+//!
+//! | Feature | Default | Status | Description |
+//! |---------|---------|--------|-------------|
+//! | `time` | yes | stable | Time-based v0 generation ([`Tnid::new_v0`]) |
+//! | `rand` | yes | stable | Random v1 generation ([`Tnid::new_v1`]) |
+//! | [`filter`] | | beta | Generate IDs without blocklisted substrings |
+//! | [`encryption`] | | beta | Encrypt v0 to v1 to hide timestamps |
+//! | `uuid` | | stable | Convert to/from the [`uuid`](::uuid) crate |
+//! | `serde` | | alpha | Serialize/deserialize support |
+//! | `sqlx-postgres` | | alpha | SQLx support for Postgres UUID columns |
+//! | `sqlx-mysql` | | alpha | SQLx support for MySQL/MariaDB |
+//! | `sqlx-sqlite` | | alpha | SQLx support for SQLite |
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used)]
