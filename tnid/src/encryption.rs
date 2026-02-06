@@ -83,6 +83,8 @@ pub enum EncryptionKeyError {
     /// The byte slice is not 16 bytes long.
     /// Contains the actual length.
     WrongByteLength(usize),
+    /// The hex string contains non-ASCII characters.
+    NonAscii,
 }
 
 impl std::fmt::Display for EncryptionKeyError {
@@ -106,6 +108,9 @@ impl std::fmt::Display for EncryptionKeyError {
             }
             Self::WrongByteLength(len) => {
                 write!(f, "encryption key slice must be 16 bytes, got {len}")
+            }
+            Self::NonAscii => {
+                write!(f, "encryption key hex string must be ASCII")
             }
         }
     }
@@ -182,6 +187,10 @@ impl EncryptionKey {
     pub fn from_hex(s: &str) -> Result<Self, EncryptionKeyError> {
         if s.len() != 32 {
             return Err(EncryptionKeyError::WrongHexLength(s.len()));
+        }
+
+        if !s.is_ascii() {
+            return Err(EncryptionKeyError::NonAscii);
         }
 
         let bytes_slice = s.as_bytes();
