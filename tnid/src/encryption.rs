@@ -58,9 +58,9 @@
 //! ```
 
 use aes::Aes128;
-use fpe::ff1::{FlexibleNumeralString, FF1};
+use fpe::ff1::{FF1, FlexibleNumeralString};
 
-use crate::{utils, TnidVariant};
+use crate::{TnidVariant, utils};
 
 /// The radix used for FF1 encryption (hex digits, 0-15).
 const FF1_RADIX: u32 = 16;
@@ -244,7 +244,6 @@ impl EncryptionKey {
             .map_err(|_| EncryptionKeyError::WrongByteLength(s.len()))?;
         Ok(Self::new(bytes))
     }
-
 }
 
 /// Mask for the right-most Payload bits section (bits 0-51).
@@ -457,11 +456,14 @@ mod tests_release {
             ..ProptestConfig::default()
         });
         runner
-            .run(&(any::<u128>(), any::<u128>()), |(id_secret_data, secret)| {
-                let key = EncryptionKey::new(secret.to_le_bytes());
-                decrypt(id_secret_data, &key);
-                Ok(())
-            })
+            .run(
+                &(any::<u128>(), any::<u128>()),
+                |(id_secret_data, secret)| {
+                    let key = EncryptionKey::new(secret.to_le_bytes());
+                    decrypt(id_secret_data, &key);
+                    Ok(())
+                },
+            )
             .unwrap();
     }
 
@@ -471,8 +473,8 @@ mod tests_release {
     }
 
     const TEST_KEY_BYTES: [u8; 16] = [
-        0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf,
-        0x4f, 0x3c,
+        0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f,
+        0x3c,
     ];
 
     /// Fixed test key for deterministic tests

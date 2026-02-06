@@ -35,8 +35,8 @@
 #[cfg(feature = "encryption")]
 use crate::encryption::EncryptionKey;
 use crate::{
-    data_encoding, name_encoding, utils, v0, v1, Case, NameStr, Tnid, TnidName, TnidVariant,
-    UuidLike,
+    Case, NameStr, Tnid, TnidName, TnidVariant, UuidLike, data_encoding, name_encoding, utils, v0,
+    v1,
 };
 
 /// A TNID with runtime-determined name.
@@ -571,7 +571,7 @@ impl DynamicTnid {
     /// use tnid::filter::Blocklist;
     ///
     /// let name = NameStr::new("user").unwrap();
-    /// let blocklist = Blocklist::new(&["TACO", "FOO"]);
+    /// let blocklist = Blocklist::new(&["TACO", "FOO"]).unwrap();
     /// let id = DynamicTnid::new_v0_filtered(name, &blocklist).unwrap();
     /// assert!(!blocklist.contains_match(&id.data_string()));
     /// ```
@@ -618,7 +618,7 @@ impl DynamicTnid {
     /// use tnid::filter::Blocklist;
     ///
     /// let name = NameStr::new("user").unwrap();
-    /// let blocklist = Blocklist::new(&["TACO", "FOO"]);
+    /// let blocklist = Blocklist::new(&["TACO", "FOO"]).unwrap();
     /// let id = DynamicTnid::new_v1_filtered(name, &blocklist).unwrap();
     /// assert!(!blocklist.contains_match(&id.data_string()));
     /// ```
@@ -656,7 +656,7 @@ impl DynamicTnid {
     ///
     /// let name = NameStr::new("user").unwrap();
     /// let key = EncryptionKey::new([1u8; 16]);
-    /// let blocklist = Blocklist::new(&["TACO", "FOO"]);
+    /// let blocklist = Blocklist::new(&["TACO", "FOO"]).unwrap();
     /// let v0 = DynamicTnid::new_v0_filtered_for_encryption(name, &key, &blocklist).unwrap();
     /// assert!(!blocklist.contains_match(&v0.data_string()));
     /// let v1 = v0.encrypt_v0_to_v1(&key).unwrap();

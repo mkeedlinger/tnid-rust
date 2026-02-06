@@ -1024,7 +1024,7 @@ impl<Name: TnidName> Tnid<Name> {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
-    /// let blocklist = Blocklist::new(&["TACO", "FOO"]);
+    /// let blocklist = Blocklist::new(&["TACO", "FOO"]).unwrap();
     /// let id = Tnid::<User>::new_v0_filtered(&blocklist).unwrap();
     ///
     /// // The data portion won't contain "TACO" or "FOO"
@@ -1088,7 +1088,7 @@ impl<Name: TnidName> Tnid<Name> {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
-    /// let blocklist = Blocklist::new(&["TACO", "FOO"]);
+    /// let blocklist = Blocklist::new(&["TACO", "FOO"]).unwrap();
     /// let id = Tnid::<User>::new_v1_filtered(&blocklist).unwrap();
     ///
     /// // The data portion won't contain "TACO" or "FOO"
@@ -1144,7 +1144,7 @@ impl<Name: TnidName> Tnid<Name> {
     /// }
     ///
     /// let key = EncryptionKey::new([1u8; 16]);
-    /// let blocklist = Blocklist::new(&["TACO", "FOO"]);
+    /// let blocklist = Blocklist::new(&["TACO", "FOO"]).unwrap();
     /// let v0 = Tnid::<User>::new_v0_filtered_for_encryption(&key, &blocklist).unwrap();
     ///
     /// // Both V0 and encrypted V1 are clean
@@ -1205,36 +1205,36 @@ impl<Name: TnidName> Tnid<Name> {
 #[cfg_attr(docsrs, doc(cfg(feature = "internals")))]
 pub mod internals {
     pub use crate::data_encoding::{
-        expand_data_bits, extract_data_bits, id_data_to_string, string_to_id_data,
         CHAR_BIT_LENGTH as DATA_CHAR_BIT_LENGTH, CHAR_MAPPING as DATA_CHAR_MAPPING, DATA_BIT_NUM,
         DATA_CHAR_ENCODING_LEN, LEFT_DATA_SECTION_MASK, MIDDLE_DATA_SECTION_MASK,
-        RIGHT_DATA_SECTION_MASK,
+        RIGHT_DATA_SECTION_MASK, expand_data_bits, extract_data_bits, id_data_to_string,
+        string_to_id_data,
     };
     #[cfg(feature = "encryption")]
     pub use crate::encryption::{
-        decrypt, decrypt_id_v1_to_v0, encrypt, encrypt_id_v0_to_v1, expand_secret_data_bits,
-        extract_secret_data_bits, COMPLETE_SECRET_DATA_MASK, LEFT_SECRET_DATA_SECTION_MASK,
-        MIDDLE_SECRET_DATA_SECTION_MASK, RIGHT_SECRET_DATA_SECTION_MASK,
+        COMPLETE_SECRET_DATA_MASK, LEFT_SECRET_DATA_SECTION_MASK, MIDDLE_SECRET_DATA_SECTION_MASK,
+        RIGHT_SECRET_DATA_SECTION_MASK, decrypt, decrypt_id_v1_to_v0, encrypt, encrypt_id_v0_to_v1,
+        expand_secret_data_bits, extract_secret_data_bits,
     };
     pub use crate::name_encoding::{
-        extract_name_string, name_bits_to_hex, name_mask, validate_name_bits,
         CHAR_BIT_LENGTH as NAME_CHAR_BIT_LENGTH, CHAR_MAPPING as NAME_CHAR_MAPPING,
         CHAR_MASK as NAME_CHAR_MASK, NAME_MAX_CHARS, NAME_MIN_CHARS, NON_NAME_BITS,
+        extract_name_string, name_bits_to_hex, name_mask, validate_name_bits,
     };
     pub use crate::utils::{
-        change_variant, hex_char_to_nibble, u128_to_uuid_string, uuid_and_variant_mask,
-        UUID_V8_MASK,
+        UUID_V8_MASK, change_variant, hex_char_to_nibble, u128_to_uuid_string,
+        uuid_and_variant_mask,
     };
     pub use crate::v0::{
-        make_from_parts as v0_make_from_parts, millis_mask as v0_millis_mask,
-        random_bits_mask as v0_random_bits_mask, RANDOM_MASK as V0_RANDOM_MASK,
-        TIMESTAMP_FIRST_28_MASK as V0_TIMESTAMP_FIRST_28_MASK,
+        RANDOM_MASK as V0_RANDOM_MASK, TIMESTAMP_FIRST_28_MASK as V0_TIMESTAMP_FIRST_28_MASK,
         TIMESTAMP_LAST_3_MASK as V0_TIMESTAMP_LAST_3_MASK,
         TIMESTAMP_SECOND_12_MASK as V0_TIMESTAMP_SECOND_12_MASK,
+        make_from_parts as v0_make_from_parts, millis_mask as v0_millis_mask,
+        random_bits_mask as v0_random_bits_mask,
     };
     pub use crate::v1::{
-        make_from_parts as v1_make_from_parts, random_bits_mask as v1_random_bits_mask,
-        RANDOM_MASK as V1_RANDOM_MASK,
+        RANDOM_MASK as V1_RANDOM_MASK, make_from_parts as v1_make_from_parts,
+        random_bits_mask as v1_random_bits_mask,
     };
 }
 
@@ -1329,7 +1329,8 @@ mod tests {
     #[cfg(feature = "encryption")]
     #[test]
     fn encryption_bidirectional() {
-        let key = encryption::EncryptionKey::new([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+        let key =
+            encryption::EncryptionKey::new([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
 
         // Use the featureless constructor so this test doesn't require `time`/`rand`.
         let original: Tnid<TestId> = Tnid::new_v0_with_parts(1_700_000_000_000, 42);
@@ -1471,7 +1472,7 @@ mod tests {
     #[cfg(feature = "filter")]
     #[test]
     fn new_v0_filtered_produces_clean_ids() {
-        let blocklist = filter::Blocklist::new(&["TACO", "FOO", "BAR"]);
+        let blocklist = filter::Blocklist::new(&["TACO", "FOO", "BAR"]).unwrap();
 
         for _ in 0..100 {
             let id = Tnid::<TestId>::new_v0_filtered(&blocklist).unwrap();
@@ -1486,7 +1487,7 @@ mod tests {
     #[cfg(feature = "filter")]
     #[test]
     fn new_v1_filtered_produces_clean_ids() {
-        let blocklist = filter::Blocklist::new(&["TACO", "FOO", "BAR"]);
+        let blocklist = filter::Blocklist::new(&["TACO", "FOO", "BAR"]).unwrap();
 
         for _ in 0..100 {
             let id = Tnid::<TestId>::new_v1_filtered(&blocklist).unwrap();
@@ -1502,7 +1503,7 @@ mod tests {
     #[test]
     fn new_v0_filtered_for_encryption_produces_clean_ids() {
         let key = encryption::EncryptionKey::new([1u8; 16]);
-        let blocklist = filter::Blocklist::new(&["TACO", "FOO", "BAR"]);
+        let blocklist = filter::Blocklist::new(&["TACO", "FOO", "BAR"]).unwrap();
 
         for _ in 0..50 {
             let v0 = Tnid::<TestId>::new_v0_filtered_for_encryption(&key, &blocklist).unwrap();
@@ -1524,7 +1525,7 @@ mod tests {
     #[cfg(feature = "filter")]
     #[test]
     fn filtered_with_empty_blocklist_succeeds() {
-        let blocklist = filter::Blocklist::new::<&str>(&[]);
+        let blocklist = filter::Blocklist::new(&[]).unwrap();
 
         let v0 = Tnid::<TestId>::new_v0_filtered(&blocklist);
         assert!(v0.is_ok());

@@ -2,7 +2,7 @@ mod cli;
 
 use clap::Parser;
 use cli::{Cli, InternalCli, OutputFormat};
-use tnid::{encryption::EncryptionKey, internals, Case, DynamicTnid, NameStr, TnidVariant};
+use tnid::{Case, DynamicTnid, NameStr, TnidVariant, encryption::EncryptionKey, internals};
 
 fn parse_tnid(id: &str) -> DynamicTnid {
     if id.contains('.') {

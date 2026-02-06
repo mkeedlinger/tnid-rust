@@ -20,11 +20,12 @@
 //!     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
 //! }
 //!
-//! let blocklist = Blocklist::new(&["TACO", "FOO"]);
+//! let blocklist = Blocklist::new(&["TACO", "FOO"]).unwrap();
 //! let id = Tnid::<User>::new_v0_filtered(&blocklist).unwrap();
 //! // The data portion of id.to_tnid_string() won't contain "TACO" or "FOO"
 //! ```
 
+use crate::data_encoding;
 use aho_corasick::AhoCorasick;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -87,6 +88,21 @@ pub enum FilterError {
         iterations: u32,
     },
 
+    /// A blocklist pattern contains characters outside the TNID data alphabet.
+    ///
+    /// Only characters from `-0-9A-Z_a-z` can appear in TNID data strings,
+    /// so patterns with other characters can never match.
+    InvalidPattern {
+        /// The zero-based index of the invalid pattern in the input slice.
+        index: usize,
+    },
+
+    /// A blocklist pattern is empty.
+    EmptyPattern {
+        /// The zero-based index of the empty pattern in the input slice.
+        index: usize,
+    },
+
     /// Encryption error when using filtered encryption functions.
     #[cfg(feature = "encryption")]
     EncryptionError(crate::encryption::EncryptionError),
@@ -101,6 +117,16 @@ impl std::fmt::Display for FilterError {
                     "failed to generate clean ID after {iterations} iterations; \
                      blocklist may be too restrictive"
                 )
+            }
+            Self::InvalidPattern { index } => {
+                write!(
+                    f,
+                    "invalid blocklist pattern at index {index}: \
+                     only TNID data characters are allowed (-0-9A-Za-z_)"
+                )
+            }
+            Self::EmptyPattern { index } => {
+                write!(f, "empty blocklist pattern at index {index}")
             }
             #[cfg(feature = "encryption")]
             Self::EncryptionError(e) => write!(f, "encryption error: {e}"),
@@ -135,7 +161,7 @@ impl From<crate::encryption::EncryptionError> for FilterError {
 /// ```rust
 /// use tnid::filter::Blocklist;
 ///
-/// let blocklist = Blocklist::new(&["TACO", "FOO", "BAZZ"]);
+/// let blocklist = Blocklist::new(&["TACO", "FOO", "BAZZ"]).unwrap();
 ///
 /// assert!(blocklist.contains_match("xyzTACOxyz"));
 /// assert!(blocklist.contains_match("xyztacoxyz")); // case-insensitive
@@ -155,19 +181,20 @@ pub struct Blocklist {
 impl Blocklist {
     /// Creates a new blocklist from the given patterns with default iteration limits.
     ///
-    /// Patterns are matched case-insensitively. Empty patterns are ignored.
+    /// Patterns are matched case-insensitively.
     ///
-    /// # Panics
-    ///
-    /// Panics if the patterns cannot be compiled (e.g., invalid UTF-8).
-    /// This should not happen with normal string slices.
-    pub fn new<S: AsRef<str>>(patterns: &[S]) -> Self {
+    /// Returns an error if any pattern is empty or contains characters outside
+    /// the TNID data alphabet (`-0-9A-Z_a-z`).
+    pub fn new(patterns: &[&str]) -> Result<Self, FilterError> {
         Self::with_limits(patterns, FilterLimits::default())
     }
 
     /// Creates a new blocklist from the given patterns with custom iteration limits.
     ///
-    /// Patterns are matched case-insensitively. Empty patterns are ignored.
+    /// Patterns are matched case-insensitively.
+    ///
+    /// Returns an error if any pattern is empty or contains characters outside
+    /// the TNID data alphabet (`-0-9A-Z_a-z`).
     ///
     /// # Example
     ///
@@ -180,30 +207,28 @@ impl Blocklist {
     ///         max_v0_iterations: 500,
     ///         ..Default::default()
     ///     },
-    /// );
+    /// ).unwrap();
     /// ```
-    ///
-    /// # Panics
-    ///
-    /// Panics if the patterns cannot be compiled (e.g., invalid UTF-8).
-    /// This should not happen with normal string slices.
-    pub fn with_limits<S: AsRef<str>>(patterns: &[S], limits: FilterLimits) -> Self {
-        let non_empty: Vec<&str> = patterns
-            .iter()
-            .map(|p| p.as_ref())
-            .filter(|p| !p.is_empty())
-            .collect();
+    pub fn with_limits(patterns: &[&str], limits: FilterLimits) -> Result<Self, FilterError> {
+        for (index, pattern) in patterns.iter().enumerate() {
+            if pattern.is_empty() {
+                return Err(FilterError::EmptyPattern { index });
+            }
+            if !pattern.is_ascii() || !pattern.bytes().all(data_encoding::is_valid_data_char) {
+                return Err(FilterError::InvalidPattern { index });
+            }
+        }
 
         let automaton = AhoCorasick::builder()
             .ascii_case_insensitive(true)
-            .build(&non_empty)
+            .build(patterns)
             .expect("failed to build Aho-Corasick automaton");
 
-        Self {
+        Ok(Self {
             automaton,
             last_safe_timestamp: AtomicU64::new(0),
             limits,
-        }
+        })
     }
 
     /// Returns the iteration limits for this blocklist.
@@ -232,7 +257,8 @@ impl Blocklist {
     ///
     /// This allows future calls to skip past known-bad timestamp windows.
     pub(crate) fn record_safe_timestamp(&self, timestamp: u64) {
-        self.last_safe_timestamp.fetch_max(timestamp, Ordering::Relaxed);
+        self.last_safe_timestamp
+            .fetch_max(timestamp, Ordering::Relaxed);
     }
 }
 
@@ -286,10 +312,7 @@ pub fn timestamp_bump_for_char(char_pos: usize) -> u64 {
 
 /// Finds the first blocklist match in the text and returns its position and length.
 pub fn find_first_match(blocklist: &Blocklist, text: &str) -> Option<(usize, usize)> {
-    blocklist
-        .automaton
-        .find(text)
-        .map(|m| (m.start(), m.len()))
+    blocklist.automaton.find(text).map(|m| (m.start(), m.len()))
 }
 
 #[cfg(test)]
@@ -298,7 +321,7 @@ mod tests {
 
     #[test]
     fn blocklist_matches_case_insensitive() {
-        let blocklist = Blocklist::new(&["TACO", "FOO"]);
+        let blocklist = Blocklist::new(&["TACO", "FOO"]).unwrap();
 
         assert!(blocklist.contains_match("TACO"));
         assert!(blocklist.contains_match("taco"));
@@ -314,20 +337,22 @@ mod tests {
 
     #[test]
     fn blocklist_empty() {
-        let blocklist = Blocklist::new::<&str>(&[]);
+        let blocklist = Blocklist::new(&[]).unwrap();
         assert!(!blocklist.contains_match("anything"));
     }
 
     #[test]
-    fn blocklist_ignores_empty_patterns() {
-        let blocklist = Blocklist::new(&["", "TACO", ""]);
-        assert!(blocklist.contains_match("TACO"));
-        assert!(!blocklist.contains_match("FOO"));
+    fn blocklist_rejects_empty_patterns() {
+        let err = Blocklist::new(&[""]).unwrap_err();
+        assert!(matches!(err, FilterError::EmptyPattern { index: 0 }));
+
+        let err = Blocklist::new(&["TACO", ""]).unwrap_err();
+        assert!(matches!(err, FilterError::EmptyPattern { index: 1 }));
     }
 
     #[test]
     fn find_first_match_returns_position() {
-        let blocklist = Blocklist::new(&["TACO"]);
+        let blocklist = Blocklist::new(&["TACO"]).unwrap();
 
         let result = find_first_match(&blocklist, "xyzTACOxyz");
         assert_eq!(result, Some((3, 4)));
@@ -366,5 +391,25 @@ mod tests {
 
         // Char 0: 2^42 (max, ~139 years)
         assert_eq!(timestamp_bump_for_char(0), 1 << 42);
+    }
+
+    #[test]
+    fn blocklist_rejects_invalid_pattern_characters() {
+        assert!(Blocklist::new(&["TACO"]).is_ok());
+        assert!(Blocklist::new(&["hello-world_123"]).is_ok());
+
+        // Space is not in the data alphabet
+        let err = Blocklist::new(&["hello world"]).unwrap_err();
+        assert!(matches!(err, FilterError::InvalidPattern { index: 0 }));
+
+        // Reports correct index
+        let err = Blocklist::new(&["TACO", "foo@bar"]).unwrap_err();
+        assert!(matches!(err, FilterError::InvalidPattern { index: 1 }));
+
+        // Special characters
+        assert!(Blocklist::new(&["foo!bar"]).is_err());
+
+        // Non-ASCII
+        assert!(Blocklist::new(&["café"]).is_err());
     }
 }

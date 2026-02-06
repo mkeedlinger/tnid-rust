@@ -32,9 +32,9 @@ fn be_bytes_to_u128(bytes: &[u8]) -> Result<u128, sqlx::error::BoxDynError> {
 #[cfg(feature = "sqlx-postgres")]
 mod postgres {
     use super::*;
+    use sqlx::Postgres;
     use sqlx::encode::{Encode, IsNull};
     use sqlx::types::Type;
-    use sqlx::Postgres;
 
     impl<Name: TnidName> Type<Postgres> for Tnid<Name> {
         fn type_info() -> sqlx::postgres::PgTypeInfo {
@@ -119,10 +119,10 @@ mod postgres {
 #[cfg(feature = "sqlx-mysql")]
 mod mysql {
     use super::*;
+    use sqlx::MySql;
     use sqlx::decode::Decode;
     use sqlx::encode::{Encode, IsNull};
     use sqlx::types::Type;
-    use sqlx::MySql;
 
     impl<Name: TnidName> Type<MySql> for Tnid<Name> {
         fn type_info() -> sqlx::mysql::MySqlTypeInfo {
@@ -178,12 +178,12 @@ mod mysql {
 #[cfg(feature = "sqlx-sqlite")]
 mod sqlite {
     use super::*;
-    use sqlx::decode::Decode;
-    use sqlx::encode::{Encode, IsNull};
-    use sqlx::types::Type;
     use sqlx::Sqlite;
     use sqlx::TypeInfo;
     use sqlx::ValueRef;
+    use sqlx::decode::Decode;
+    use sqlx::encode::{Encode, IsNull};
+    use sqlx::types::Type;
     use std::borrow::Cow;
 
     impl<Name: TnidName> Type<Sqlite> for Tnid<Name> {

@@ -1,6 +1,6 @@
+use crate::NameStr;
 use crate::name_encoding;
 use crate::utils;
-use crate::NameStr;
 
 /// Mask for the 100 random bits in a V1 TNID.
 pub const RANDOM_MASK: u128 = 0x00000fff_ffff_0fff_0fff_ffffffffffff;
