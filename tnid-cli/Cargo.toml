@@ -1,6 +1,6 @@
 [package]
 name = "tnid-cli"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 description = "CLI tool for working with TNIDs"
 license = "MIT"
@@ -15,4 +15,4 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.5.54", features = ["derive", "env"] }
-tnid = { version = "0.1.1", path = "../tnid", features = ["encryption", "time", "rand", "internals"] }
+tnid = { version = "0.1.2", path = "../tnid", features = ["encryption", "time", "rand", "internals"] }
