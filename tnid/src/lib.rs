@@ -894,7 +894,7 @@ impl<Name: TnidName> Tnid<Name> {
     ///
     /// # Errors
     ///
-    /// Returns [`FilterError::MaxIterationsExceeded`] if unable to generate a clean ID
+    /// Returns [`filter::FilterError::MaxIterationsExceeded`] if unable to generate a clean ID
     /// after many attempts. This typically indicates the blocklist is too restrictive.
     ///
     /// # Example
@@ -958,7 +958,7 @@ impl<Name: TnidName> Tnid<Name> {
     ///
     /// # Errors
     ///
-    /// Returns [`FilterError::MaxIterationsExceeded`] if unable to generate a clean ID
+    /// Returns [`filter::FilterError::MaxIterationsExceeded`] if unable to generate a clean ID
     /// after many attempts. This is extremely unlikely with a reasonable blocklist.
     ///
     /// # Example
@@ -1012,8 +1012,8 @@ impl<Name: TnidName> Tnid<Name> {
     ///
     /// # Errors
     ///
-    /// Returns [`FilterError::MaxIterationsExceeded`] if unable to generate a clean ID
-    /// after many attempts, or [`FilterError::EncryptionError`] if encryption fails.
+    /// Returns [`filter::FilterError::MaxIterationsExceeded`] if unable to generate a clean ID
+    /// after many attempts, or [`filter::FilterError::EncryptionError`] if encryption fails.
     ///
     /// # Example
     ///

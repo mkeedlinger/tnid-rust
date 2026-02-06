@@ -3,6 +3,12 @@
 //! This module provides functionality to generate TNIDs that don't contain
 //! specified substrings (e.g., profanity) in their string representation.
 //!
+//! Filtered generation works by retrying: if a generated ID's string
+//! representation contains a blocklisted word, a new ID is generated.
+//! Large blocklists or short patterns (under 3 characters) can significantly
+//! increase the number of retries needed. Iteration limits are configurable
+//! via [`FilterLimits`].
+//!
 //! # Example
 //!
 //! ```rust
