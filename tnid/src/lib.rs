@@ -247,6 +247,56 @@ impl<Name: TnidName> Tnid<Name> {
         self.id
     }
 
+    /// Converts the TNID to its 16-byte big-endian representation.
+    ///
+    /// This is the inverse of [`Self::from_bytes`].
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{Tnid, TnidName, NameStr};
+    ///
+    /// struct User;
+    /// impl TnidName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// let id = Tnid::<User>::new_v0();
+    /// let bytes = id.to_bytes();
+    /// assert_eq!(bytes.len(), 16);
+    /// ```
+    pub fn to_bytes(&self) -> [u8; 16] {
+        self.id.to_be_bytes()
+    }
+
+    /// Creates a TNID from its 16-byte big-endian representation.
+    ///
+    /// This is the inverse of [`Self::to_bytes`] and validates that the bytes represent
+    /// a valid TNID.
+    ///
+    /// Returns `Err` if the bytes don't represent a valid TNID (invalid UUID version/variant
+    /// bits or name mismatch).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{Tnid, TnidName, NameStr};
+    ///
+    /// struct User;
+    /// impl TnidName for User {
+    ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
+    /// }
+    ///
+    /// let original = Tnid::<User>::new_v1();
+    /// let bytes = original.to_bytes();
+    ///
+    /// let parsed = Tnid::<User>::from_bytes(bytes).unwrap();
+    /// assert_eq!(parsed.as_u128(), original.as_u128());
+    /// ```
+    pub fn from_bytes(bytes: [u8; 16]) -> Result<Self, ParseTnidError> {
+        Self::from_u128(u128::from_be_bytes(bytes))
+    }
+
     /// Generates a new time-ordered TNID (alias for [`Self::new_v0`]).
     ///
     /// This variant is sortable by creation time, similar to UUIDv7. TNIDs created earlier
