@@ -632,6 +632,7 @@ impl core::str::FromStr for DynamicTnid {
 
         match s.len() {
             MIN_TNID_LEN..=MAX_TNID_LEN if s.contains('.') => Self::parse_tnid_string(s),
+            MIN_TNID_LEN..=MAX_TNID_LEN => Err(crate::ParseTnidError::MissingSeparator),
             UUID_LEN => Self::parse_uuid_string(s),
             len => Err(crate::ParseTnidError::InvalidLength(len)),
         }
