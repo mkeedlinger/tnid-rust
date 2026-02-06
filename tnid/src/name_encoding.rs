@@ -185,6 +185,7 @@ impl std::error::Error for NameError {}
 /// assert!(NameStr::new("").is_err());
 /// assert!(NameStr::new("CAPS").is_err());
 /// ```
+#[derive(Clone, Copy)]
 pub struct NameStr<'a>(&'a str);
 impl<'a> NameStr<'a> {
     /// Creates a new `NameStr` with compile-time validation when used in a const context.

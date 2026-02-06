@@ -559,6 +559,144 @@ impl DynamicTnid {
         let id = crate::encryption::decrypt_id_v1_to_v0(self.0, key)?;
         Ok(Self(id))
     }
+
+    /// Generates a new V0 TNID with no blocklist matches in its data string.
+    ///
+    /// See [`crate::Tnid::new_v0_filtered`] for details on the algorithm.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tnid::{DynamicTnid, NameStr};
+    /// use tnid::filter::Blocklist;
+    ///
+    /// let name = NameStr::new("user").unwrap();
+    /// let blocklist = Blocklist::new(&["TACO", "FOO"]);
+    /// let id = DynamicTnid::new_v0_filtered(name, &blocklist).unwrap();
+    /// assert!(!blocklist.contains_match(&id.data_string()));
+    /// ```
+    #[cfg(feature = "filter")]
+    pub fn new_v0_filtered(
+        name: NameStr,
+        blocklist: &crate::filter::Blocklist,
+    ) -> Result<Self, crate::filter::FilterError> {
+        let mut timestamp = blocklist.get_starting_timestamp();
+        let max_iterations = blocklist.limits().max_v0_iterations;
+
+        for _ in 0..max_iterations {
+            let random: u64 = rand::random();
+            let id = Self::new_v0_with_parts(name, timestamp, random);
+            let data = id.data_string();
+
+            match crate::filter::find_first_match(blocklist, &data) {
+                None => {
+                    blocklist.record_safe_timestamp(timestamp);
+                    return Ok(id);
+                }
+                Some((start, len)) => {
+                    if !crate::filter::match_touches_random_portion(start, len) {
+                        let rightmost_char = start + len - 1;
+                        timestamp += crate::filter::timestamp_bump_for_char(rightmost_char);
+                    }
+                }
+            }
+        }
+
+        Err(crate::filter::FilterError::MaxIterationsExceeded {
+            iterations: max_iterations,
+        })
+    }
+
+    /// Generates a new V1 TNID with no blocklist matches in its data string.
+    ///
+    /// See [`crate::Tnid::new_v1_filtered`] for details on the algorithm.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tnid::{DynamicTnid, NameStr};
+    /// use tnid::filter::Blocklist;
+    ///
+    /// let name = NameStr::new("user").unwrap();
+    /// let blocklist = Blocklist::new(&["TACO", "FOO"]);
+    /// let id = DynamicTnid::new_v1_filtered(name, &blocklist).unwrap();
+    /// assert!(!blocklist.contains_match(&id.data_string()));
+    /// ```
+    #[cfg(feature = "filter")]
+    pub fn new_v1_filtered(
+        name: NameStr,
+        blocklist: &crate::filter::Blocklist,
+    ) -> Result<Self, crate::filter::FilterError> {
+        let max_iterations = blocklist.limits().max_v1_iterations;
+
+        for _ in 0..max_iterations {
+            let id = Self::new_v1(name);
+            let data = id.data_string();
+
+            if !blocklist.contains_match(&data) {
+                return Ok(id);
+            }
+        }
+
+        Err(crate::filter::FilterError::MaxIterationsExceeded {
+            iterations: max_iterations,
+        })
+    }
+
+    /// Generates a V0 TNID where both the V0 and its encrypted V1 are clean.
+    ///
+    /// See [`crate::Tnid::new_v0_filtered_for_encryption`] for details on the algorithm.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tnid::{DynamicTnid, NameStr};
+    /// use tnid::encryption::EncryptionKey;
+    /// use tnid::filter::Blocklist;
+    ///
+    /// let name = NameStr::new("user").unwrap();
+    /// let key = EncryptionKey::new([1u8; 16]);
+    /// let blocklist = Blocklist::new(&["TACO", "FOO"]);
+    /// let v0 = DynamicTnid::new_v0_filtered_for_encryption(name, &key, &blocklist).unwrap();
+    /// assert!(!blocklist.contains_match(&v0.data_string()));
+    /// let v1 = v0.encrypt_v0_to_v1(&key).unwrap();
+    /// assert!(!blocklist.contains_match(&v1.data_string()));
+    /// ```
+    #[cfg(all(feature = "filter", feature = "encryption"))]
+    pub fn new_v0_filtered_for_encryption(
+        name: NameStr,
+        key: &EncryptionKey,
+        blocklist: &crate::filter::Blocklist,
+    ) -> Result<Self, crate::filter::FilterError> {
+        let mut timestamp = blocklist.get_starting_timestamp();
+        let max_iterations = blocklist.limits().max_encryption_iterations;
+
+        for _ in 0..max_iterations {
+            let random: u64 = rand::random();
+            let v0 = Self::new_v0_with_parts(name, timestamp, random);
+            let v0_data = v0.data_string();
+
+            if let Some((start, len)) = crate::filter::find_first_match(blocklist, &v0_data) {
+                if !crate::filter::match_touches_random_portion(start, len) {
+                    let rightmost_char = start + len - 1;
+                    timestamp += crate::filter::timestamp_bump_for_char(rightmost_char);
+                }
+                continue;
+            }
+
+            let v1 = v0.encrypt_v0_to_v1(key)?;
+            let v1_data = v1.data_string();
+
+            if !blocklist.contains_match(&v1_data) {
+                blocklist.record_safe_timestamp(timestamp);
+                return Ok(v0);
+            }
+        }
+
+        Err(crate::filter::FilterError::MaxIterationsExceeded {
+            iterations: max_iterations,
+        })
+    }
 }
 
 impl<Name: TnidName> From<Tnid<Name>> for DynamicTnid {
