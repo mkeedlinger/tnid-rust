@@ -24,11 +24,15 @@ pub enum Cli {
     ///
     ///   $ tnid generate user
     ///
-    ///   user_01jh5p8zqk0000000000000000
+    ///   user.BsOdOgguzJorJeVH7
     ///
-    ///   $ tnid generate post -n 1
+    ///   $ tnid generate user -n 1
     ///
-    ///   post_01jh5p8zqk1111111111111111
+    ///   user.8z099cGumNjXw8whQ
+    ///
+    ///   $ tnid generate user -o uuid
+    ///
+    ///   d6157338-6696-8b69-895b-2e3528a74163
     Generate {
         /// The TNID name (1-4 characters, digits 0-4 and lowercase a-z only)
         name: String,
@@ -44,15 +48,17 @@ pub enum Cli {
 
     /// Encrypt a V0 TNID to V1
     ///
+    /// The key can be provided as an argument or via the TNID_KEY environment variable.
+    ///
     /// Examples:
     ///
-    ///   $ tnid encrypt user_01jh5p8zqk0000000000000000 0102030405060708090a0b0c0d0e0f10
+    ///   $ tnid encrypt user.BsOdOgguzJorJeVH7 0102030405060708090a0b0c0d0e0f10
     ///
-    ///   user_01jh5p8zqk1234567890abcdef
+    ///   user.-8hAMlKY0mjrmzQHv
     ///
-    ///   $ TNID_KEY=0102030405060708090a0b0c0d0e0f10 tnid encrypt user_01jh5p8zqk0000000000000000
+    ///   $ TNID_KEY=0102030405060708090a0b0c0d0e0f10 tnid encrypt user.BsOdOgguzJorJeVH7
     ///
-    ///   user_01jh5p8zqk1234567890abcdef
+    ///   user.-8hAMlKY0mjrmzQHv
     Encrypt {
         /// The TNID to encrypt
         id: String,
@@ -68,11 +74,13 @@ pub enum Cli {
 
     /// Decrypt a V1 TNID to V0
     ///
+    /// The key can be provided as an argument or via the TNID_KEY environment variable.
+    ///
     /// Examples:
     ///
-    ///   $ tnid decrypt user_01jh5p8zqk1234567890abcdef 0102030405060708090a0b0c0d0e0f10
+    ///   $ tnid decrypt user.-8hAMlKY0mjrmzQHv 0102030405060708090a0b0c0d0e0f10
     ///
-    ///   user_01jh5p8zqk0000000000000000
+    ///   user.BsOdOgguzJorJeVH7
     Decrypt {
         /// The TNID to decrypt
         id: String,
@@ -88,16 +96,21 @@ pub enum Cli {
 
     /// Show detailed TNID information
     ///
+    /// Accepts both TNID and UUID format as input.
+    ///
     /// Examples:
     ///
-    ///   $ tnid inspect user_01jh5p8zqk0000000000000000
+    ///   $ tnid inspect user.BsOdOgguzJorJeVH7
     ///
     ///   name: user
-    ///   name_hex: 19a80
+    ///
+    ///   name_hex: d6157
+    ///
     ///   variant: V0
-    ///   tnid_string: user_01jh5p8zqk0000000000000000
-    ///   uuid_string: cab19528-f09d-86d9-928e-96ea03dc6af3
-    ///   timestamp: 2025-01-09T12:34:56.789Z
+    ///
+    ///   tnid_string: user.BsOdOgguzJorJeVH7
+    ///
+    ///   uuid_string: d6157338-6696-86cb-8ebf-534dd4aa0488
     Inspect {
         /// The TNID to inspect (TNID or UUID format)
         id: String,
@@ -113,17 +126,15 @@ pub enum Cli {
     ///
     ///   $ tnid validate-name User
     ///
-    ///   invalid: uppercase not allowed
-    ///
-    ///   $ tnid validate-name abc9
-    ///
-    ///   invalid: digit 9 not allowed (only 0-4)
+    ///   invalid: invalid character 'U' (0x55) in name; only 0-4 and a-z are allowed
     ValidateName {
         /// The name to validate
         name: String,
     },
 
     /// Internal debug and verification commands
+    ///
+    /// Low-level commands for debugging the TNID spec. Not needed for normal use.
     #[command(subcommand)]
     Internals(InternalCli),
 }
@@ -134,9 +145,9 @@ pub enum InternalCli {
     ///
     /// Examples:
     ///
-    ///   $ tnid internal encode-name user
+    ///   $ tnid internals encode-name user
     ///
-    ///   19a80
+    ///   d6157
     EncodeName {
         /// The name to encode
         name: String,
@@ -146,7 +157,7 @@ pub enum InternalCli {
     ///
     /// Examples:
     ///
-    ///   $ tnid internal decode-name 19a80
+    ///   $ tnid internals decode-name d6157
     ///
     ///   user
     DecodeName {
