@@ -1,6 +1,6 @@
 [package]
 name = "tnid"
-version = "0.0.8"
+version = "0.1.0"
 edition = "2024"
 description = "A UUID compatible ID with static type checking"
 license = "MIT"
