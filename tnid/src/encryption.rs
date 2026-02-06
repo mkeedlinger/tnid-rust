@@ -437,15 +437,21 @@ mod tests_release {
     use super::*;
     use proptest::prelude::*;
 
-    proptest! {
-        #![proptest_config(ProptestConfig {
-            cases: 100_000, .. ProptestConfig::default()
-        })]
-        #[test]
-        fn decrypt_no_panic(id_secret_data: u128, secret: u128) {
-            let key = EncryptionKey::new(secret.to_le_bytes());
-            decrypt(id_secret_data, &key);
-        }
+    use proptest::test_runner::TestRunner;
+
+    #[test]
+    fn decrypt_no_panic() {
+        let mut runner = TestRunner::new(ProptestConfig {
+            cases: 100_000,
+            ..ProptestConfig::default()
+        });
+        runner
+            .run(&(any::<u128>(), any::<u128>()), |(id_secret_data, secret)| {
+                let key = EncryptionKey::new(secret.to_le_bytes());
+                decrypt(id_secret_data, &key);
+                Ok(())
+            })
+            .unwrap();
     }
 
     /// Helper: count how many values have bit `bit_pos` set to 1

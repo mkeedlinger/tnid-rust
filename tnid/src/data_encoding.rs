@@ -278,14 +278,19 @@ mod tests {
 mod tests_release {
     use super::*;
     use proptest::prelude::*;
+    use proptest::test_runner::TestRunner;
 
-    proptest! {
-        #![proptest_config(ProptestConfig {
-            cases: 1_000_000, .. ProptestConfig::default()
-        })]
-        #[test]
-        fn id_data_to_string_no_panic(id: u128){
-            id_data_to_string(id);
-        }
+    #[test]
+    fn id_data_to_string_no_panic() {
+        let mut runner = TestRunner::new(ProptestConfig {
+            cases: 1_000_000,
+            ..ProptestConfig::default()
+        });
+        runner
+            .run(&any::<u128>(), |id| {
+                id_data_to_string(id);
+                Ok(())
+            })
+            .unwrap();
     }
 }

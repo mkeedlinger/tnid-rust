@@ -400,7 +400,7 @@ pub fn extract_name_string(id: u128) -> Option<String> {
             .iter()
             .find(|(encoded, _)| *encoded == encoded_byte)
             .map(|(_, ascii_char)| *ascii_char)
-            .expect("there must be a mapping"); // todo: make an exhaustive test for this
+            .expect("all non-zero 5-bit values (1-31) have mappings");
 
         name_bytes.push(decoded_char);
     }
@@ -417,17 +417,58 @@ mod tests_release {
     use super::*;
     use proptest::prelude::*;
 
-    proptest! {
-        #![proptest_config(ProptestConfig {
-            cases: 100_000, .. ProptestConfig::default()
-        })]
-        #[test]
-        fn name_mask_no_panic(name: String) {
-            let Ok(name) = NameStr::new(name.as_str()) else {
-                return Ok(());
-            };
+    use proptest::test_runner::TestRunner;
 
-            name_mask(name);
-        }
+    #[test]
+    fn name_mask_no_panic() {
+        let mut runner = TestRunner::new(ProptestConfig {
+            cases: 100_000,
+            ..ProptestConfig::default()
+        });
+        runner
+            .run(&any::<String>(), |name| {
+                let Ok(name) = NameStr::new(name.as_str()) else {
+                    return Ok(());
+                };
+                name_mask(name);
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn extract_name_string_no_panic() {
+        let mut runner = TestRunner::new(ProptestConfig {
+            cases: 100_000,
+            ..ProptestConfig::default()
+        });
+        runner
+            .run(&any::<u128>(), |id| {
+                // Should never panic, even for arbitrary bit patterns.
+                let _ = extract_name_string(id);
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn extract_name_string_no_panic_valid_chars() {
+        let mut runner = TestRunner::new(ProptestConfig {
+            cases: 100_000,
+            ..ProptestConfig::default()
+        });
+        let strategy = (1u128..=31, 0u128..=31, 0u128..=31, 0u128..=31);
+        runner
+            .run(&strategy, |(c0, c1, c2, c3)| {
+                // Build a u128 with specific non-zero chars in the name positions
+                // to ensure the CHAR_MAPPING lookup is always hit.
+                let id = (c0 << 123) | (c1 << 118) | (c2 << 113) | (c3 << 108);
+                let result = extract_name_string(id);
+                // c0 is always non-zero, so at least one char is decoded before
+                // any null terminator is hit.
+                assert!(result.is_some());
+                Ok(())
+            })
+            .unwrap();
     }
 }
