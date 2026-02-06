@@ -919,7 +919,8 @@ impl<Name: TnidName> Tnid<Name> {
         // Start from max(current_time, last_safe_timestamp) to avoid re-discovering bad windows
         let mut timestamp = blocklist.get_starting_timestamp();
 
-        for _ in 0..filter::MAX_V0_ITERATIONS {
+        let max_iterations = blocklist.limits().max_v0_iterations;
+        for _ in 0..max_iterations {
             let random: u64 = rand::random();
             let id = Self::new_v0_with_parts(timestamp, random);
             let data = id.data_string();
@@ -943,7 +944,7 @@ impl<Name: TnidName> Tnid<Name> {
         }
 
         Err(filter::FilterError::MaxIterationsExceeded {
-            iterations: filter::MAX_V0_ITERATIONS,
+            iterations: max_iterations,
         })
     }
 
@@ -979,7 +980,8 @@ impl<Name: TnidName> Tnid<Name> {
     /// ```
     #[cfg(feature = "filter")]
     pub fn new_v1_filtered(blocklist: &filter::Blocklist) -> Result<Self, filter::FilterError> {
-        for _ in 0..filter::MAX_V1_ITERATIONS {
+        let max_iterations = blocklist.limits().max_v1_iterations;
+        for _ in 0..max_iterations {
             let id = Self::new_v1();
             let data = id.data_string();
 
@@ -989,7 +991,7 @@ impl<Name: TnidName> Tnid<Name> {
         }
 
         Err(filter::FilterError::MaxIterationsExceeded {
-            iterations: filter::MAX_V1_ITERATIONS,
+            iterations: max_iterations,
         })
     }
 
@@ -1041,8 +1043,9 @@ impl<Name: TnidName> Tnid<Name> {
     ) -> Result<Self, filter::FilterError> {
         // Start from max(current_time, last_safe_timestamp) to avoid re-discovering bad windows
         let mut timestamp = blocklist.get_starting_timestamp();
+        let max_iterations = blocklist.limits().max_encryption_iterations;
 
-        for _ in 0..filter::MAX_ENCRYPTION_ITERATIONS {
+        for _ in 0..max_iterations {
             let random: u64 = rand::random();
             let v0 = Self::new_v0_with_parts(timestamp, random);
             let v0_data = v0.data_string();
@@ -1073,7 +1076,7 @@ impl<Name: TnidName> Tnid<Name> {
         }
 
         Err(filter::FilterError::MaxIterationsExceeded {
-            iterations: filter::MAX_ENCRYPTION_ITERATIONS,
+            iterations: max_iterations,
         })
     }
 }

@@ -22,17 +22,51 @@
 use aho_corasick::AhoCorasick;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// Maximum iterations before giving up on finding a clean ID.
-///
-/// With a reasonable blocklist, hitting this limit is extremely unlikely.
-/// If reached, the blocklist may be too restrictive.
+/// Default maximum iterations for V0 filtered generation.
 pub const MAX_V0_ITERATIONS: u32 = 1000;
 
-/// Maximum iterations for V1 filtering.
+/// Default maximum iterations for V1 filtered generation.
 pub const MAX_V1_ITERATIONS: u32 = 100;
 
-/// Maximum iterations when filtering for both V0 and encrypted V1.
+/// Default maximum iterations when filtering for both V0 and encrypted V1.
 pub const MAX_ENCRYPTION_ITERATIONS: u32 = 10000;
+
+/// Iteration limits for filtered TNID generation.
+///
+/// Controls how many attempts the filter algorithms make before giving up.
+/// Use [`Default::default()`] for the standard limits, and override individual fields
+/// with struct update syntax:
+///
+/// ```rust
+/// use tnid::filter::FilterLimits;
+///
+/// let limits = FilterLimits {
+///     max_v0_iterations: 500,
+///     ..Default::default()
+/// };
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FilterLimits {
+    /// Maximum iterations for V0 filtered generation.
+    /// Default: [`MAX_V0_ITERATIONS`].
+    pub max_v0_iterations: u32,
+    /// Maximum iterations for V1 filtered generation.
+    /// Default: [`MAX_V1_ITERATIONS`].
+    pub max_v1_iterations: u32,
+    /// Maximum iterations for combined V0+encrypted V1 filtered generation.
+    /// Default: [`MAX_ENCRYPTION_ITERATIONS`].
+    pub max_encryption_iterations: u32,
+}
+
+impl Default for FilterLimits {
+    fn default() -> Self {
+        Self {
+            max_v0_iterations: MAX_V0_ITERATIONS,
+            max_v1_iterations: MAX_V1_ITERATIONS,
+            max_encryption_iterations: MAX_ENCRYPTION_ITERATIONS,
+        }
+    }
+}
 
 /// Error returned when filtered ID generation fails.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,10 +143,11 @@ pub struct Blocklist {
     /// until we escape that window. This field ensures subsequent calls don't have to
     /// rediscover the same bad window — they start from the last known safe timestamp.
     last_safe_timestamp: AtomicU64,
+    limits: FilterLimits,
 }
 
 impl Blocklist {
-    /// Creates a new blocklist from the given patterns.
+    /// Creates a new blocklist from the given patterns with default iteration limits.
     ///
     /// Patterns are matched case-insensitively. Empty patterns are ignored.
     ///
@@ -121,6 +156,32 @@ impl Blocklist {
     /// Panics if the patterns cannot be compiled (e.g., invalid UTF-8).
     /// This should not happen with normal string slices.
     pub fn new<S: AsRef<str>>(patterns: &[S]) -> Self {
+        Self::with_limits(patterns, FilterLimits::default())
+    }
+
+    /// Creates a new blocklist from the given patterns with custom iteration limits.
+    ///
+    /// Patterns are matched case-insensitively. Empty patterns are ignored.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use tnid::filter::{Blocklist, FilterLimits};
+    ///
+    /// let blocklist = Blocklist::with_limits(
+    ///     &["TACO", "FOO"],
+    ///     FilterLimits {
+    ///         max_v0_iterations: 500,
+    ///         ..Default::default()
+    ///     },
+    /// );
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if the patterns cannot be compiled (e.g., invalid UTF-8).
+    /// This should not happen with normal string slices.
+    pub fn with_limits<S: AsRef<str>>(patterns: &[S], limits: FilterLimits) -> Self {
         let non_empty: Vec<&str> = patterns
             .iter()
             .map(|p| p.as_ref())
@@ -135,7 +196,13 @@ impl Blocklist {
         Self {
             automaton,
             last_safe_timestamp: AtomicU64::new(0),
+            limits,
         }
+    }
+
+    /// Returns the iteration limits for this blocklist.
+    pub fn limits(&self) -> &FilterLimits {
+        &self.limits
     }
 
     /// Returns `true` if the text contains any blocklisted word.
@@ -167,6 +234,7 @@ impl std::fmt::Debug for Blocklist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Blocklist")
             .field("pattern_count", &self.automaton.patterns_len())
+            .field("limits", &self.limits)
             .finish()
     }
 }
