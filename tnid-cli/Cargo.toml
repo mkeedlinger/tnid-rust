@@ -3,6 +3,10 @@ name = "tnid-cli"
 version = "0.0.8"
 edition = "2024"
 
+[[bin]]
+name = "tnid"
+path = "src/main.rs"
+
 [dependencies]
 clap = { version = "4.5.54", features = ["derive", "env"] }
 tnid = { path = "../tnid", features = ["encryption", "time", "rand", "internals"] }
