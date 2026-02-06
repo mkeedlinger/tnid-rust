@@ -22,30 +22,6 @@
 use aho_corasick::AhoCorasick;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// Tracks the last known safe timestamp to avoid re-discovering bad windows.
-///
-/// When a bad word appears in the timestamp portion, we have to bump the timestamp
-/// until we escape that window. This global ensures subsequent calls don't have to
-/// rediscover the same bad window - they start from the last known safe timestamp.
-static LAST_SAFE_TIMESTAMP: AtomicU64 = AtomicU64::new(0);
-
-/// Returns the starting timestamp for filtered V0 generation.
-///
-/// This is the maximum of the current time and the last known safe timestamp,
-/// ensuring we don't waste iterations rediscovering bad timestamp windows.
-pub(crate) fn get_starting_timestamp() -> u64 {
-    let current = (time::OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000) as u64;
-    let last_safe = LAST_SAFE_TIMESTAMP.load(Ordering::Relaxed);
-    current.max(last_safe)
-}
-
-/// Records a safe timestamp after successfully generating a filtered ID.
-///
-/// This allows future calls to skip past known-bad timestamp windows.
-pub(crate) fn record_safe_timestamp(timestamp: u64) {
-    LAST_SAFE_TIMESTAMP.fetch_max(timestamp, Ordering::Relaxed);
-}
-
 /// Maximum iterations before giving up on finding a clean ID.
 ///
 /// With a reasonable blocklist, hitting this limit is extremely unlikely.
@@ -125,9 +101,14 @@ impl From<crate::encryption::EncryptionError> for FilterError {
 /// assert!(blocklist.contains_match("xyztacoxyz")); // case-insensitive
 /// assert!(!blocklist.contains_match("xyzHELLOxyz"));
 /// ```
-#[derive(Clone)]
 pub struct Blocklist {
     automaton: AhoCorasick,
+    /// Tracks the last known safe timestamp to avoid re-discovering bad windows.
+    ///
+    /// When a bad word appears in the timestamp portion, we have to bump the timestamp
+    /// until we escape that window. This field ensures subsequent calls don't have to
+    /// rediscover the same bad window — they start from the last known safe timestamp.
+    last_safe_timestamp: AtomicU64,
 }
 
 impl Blocklist {
@@ -151,7 +132,10 @@ impl Blocklist {
             .build(&non_empty)
             .expect("failed to build Aho-Corasick automaton");
 
-        Self { automaton }
+        Self {
+            automaton,
+            last_safe_timestamp: AtomicU64::new(0),
+        }
     }
 
     /// Returns `true` if the text contains any blocklisted word.
@@ -161,6 +145,22 @@ impl Blocklist {
         self.automaton.is_match(text)
     }
 
+    /// Returns the starting timestamp for filtered V0 generation.
+    ///
+    /// This is the maximum of the current time and the last known safe timestamp,
+    /// ensuring we don't waste iterations rediscovering bad timestamp windows.
+    pub(crate) fn get_starting_timestamp(&self) -> u64 {
+        let current = (time::OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000) as u64;
+        let last_safe = self.last_safe_timestamp.load(Ordering::Relaxed);
+        current.max(last_safe)
+    }
+
+    /// Records a safe timestamp after successfully generating a filtered ID.
+    ///
+    /// This allows future calls to skip past known-bad timestamp windows.
+    pub(crate) fn record_safe_timestamp(&self, timestamp: u64) {
+        self.last_safe_timestamp.fetch_max(timestamp, Ordering::Relaxed);
+    }
 }
 
 impl std::fmt::Debug for Blocklist {

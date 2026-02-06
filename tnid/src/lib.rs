@@ -867,7 +867,7 @@ impl<Name: TnidName> Tnid<Name> {
     #[cfg(feature = "filter")]
     pub fn new_v0_filtered(blocklist: &filter::Blocklist) -> Result<Self, filter::FilterError> {
         // Start from max(current_time, last_safe_timestamp) to avoid re-discovering bad windows
-        let mut timestamp = filter::get_starting_timestamp();
+        let mut timestamp = blocklist.get_starting_timestamp();
 
         for _ in 0..filter::MAX_V0_ITERATIONS {
             let random: u64 = rand::random();
@@ -877,7 +877,7 @@ impl<Name: TnidName> Tnid<Name> {
             match filter::find_first_match(blocklist, &data) {
                 None => {
                     // Record this timestamp so future calls can skip past any bad windows we found
-                    filter::record_safe_timestamp(timestamp);
+                    blocklist.record_safe_timestamp(timestamp);
                     return Ok(id);
                 }
                 Some((start, len)) => {
@@ -990,7 +990,7 @@ impl<Name: TnidName> Tnid<Name> {
         blocklist: &filter::Blocklist,
     ) -> Result<Self, filter::FilterError> {
         // Start from max(current_time, last_safe_timestamp) to avoid re-discovering bad windows
-        let mut timestamp = filter::get_starting_timestamp();
+        let mut timestamp = blocklist.get_starting_timestamp();
 
         for _ in 0..filter::MAX_ENCRYPTION_ITERATIONS {
             let random: u64 = rand::random();
@@ -1014,7 +1014,7 @@ impl<Name: TnidName> Tnid<Name> {
 
             if !blocklist.contains_match(&v1_data) {
                 // Both are clean!
-                filter::record_safe_timestamp(timestamp);
+                blocklist.record_safe_timestamp(timestamp);
                 return Ok(v0);
             }
             // V1 has a match - since V1 is all random-looking after encryption,
