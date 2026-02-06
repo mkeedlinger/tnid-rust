@@ -522,9 +522,9 @@ impl DynamicTnid {
     #[cfg(feature = "encryption")]
     pub fn encrypt_v0_to_v1(
         &self,
-        key: impl Into<EncryptionKey>,
+        key: &EncryptionKey,
     ) -> Result<Self, crate::encryption::EncryptionError> {
-        let id = crate::encryption::encrypt_id_v0_to_v1(self.0, &key.into())?;
+        let id = crate::encryption::encrypt_id_v0_to_v1(self.0, key)?;
         Ok(Self(id))
     }
 
@@ -534,9 +534,9 @@ impl DynamicTnid {
     #[cfg(feature = "encryption")]
     pub fn decrypt_v1_to_v0(
         &self,
-        key: impl Into<EncryptionKey>,
+        key: &EncryptionKey,
     ) -> Result<Self, crate::encryption::EncryptionError> {
-        let id = crate::encryption::decrypt_id_v1_to_v0(self.0, &key.into())?;
+        let id = crate::encryption::decrypt_id_v1_to_v0(self.0, key)?;
         Ok(Self(id))
     }
 }

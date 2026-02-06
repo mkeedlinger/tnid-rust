@@ -751,27 +751,28 @@ impl<Name: TnidName> Tnid<Name> {
     ///
     /// ```rust
     /// use tnid::{Tnid, TnidName, NameStr, TnidVariant};
+    /// use tnid::encryption::EncryptionKey;
     ///
     /// struct User;
     /// impl TnidName for User {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
-    /// let secret = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+    /// let key = EncryptionKey::new([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
     ///
     /// let original = Tnid::<User>::new_v0();
-    /// let encrypted = original.encrypt_v0_to_v1(secret).unwrap();
+    /// let encrypted = original.encrypt_v0_to_v1(&key).unwrap();
     /// assert_eq!(encrypted.variant(), TnidVariant::V1);
     ///
-    /// let decrypted = encrypted.decrypt_v1_to_v0(secret).unwrap();
+    /// let decrypted = encrypted.decrypt_v1_to_v0(&key).unwrap();
     /// assert_eq!(decrypted.as_u128(), original.as_u128());
     /// ```
     #[cfg(feature = "encryption")]
     pub fn encrypt_v0_to_v1(
         &self,
-        key: impl Into<encryption::EncryptionKey>,
+        key: &encryption::EncryptionKey,
     ) -> Result<Self, encryption::EncryptionError> {
-        let id = encryption::encrypt_id_v0_to_v1(self.id, &key.into())?;
+        let id = encryption::encrypt_id_v0_to_v1(self.id, key)?;
 
         Ok(Self {
             id_name: PhantomData,
@@ -798,27 +799,28 @@ impl<Name: TnidName> Tnid<Name> {
     ///
     /// ```rust
     /// use tnid::{Tnid, TnidName, NameStr, TnidVariant};
+    /// use tnid::encryption::EncryptionKey;
     ///
     /// struct User;
     /// impl TnidName for User {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
-    /// let secret = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+    /// let key = EncryptionKey::new([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
     ///
     /// let original = Tnid::<User>::new_v0();
-    /// let encrypted = original.encrypt_v0_to_v1(secret).unwrap();
+    /// let encrypted = original.encrypt_v0_to_v1(&key).unwrap();
     ///
-    /// let decrypted = encrypted.decrypt_v1_to_v0(secret).unwrap();
+    /// let decrypted = encrypted.decrypt_v1_to_v0(&key).unwrap();
     /// assert_eq!(decrypted.variant(), TnidVariant::V0);
     /// assert_eq!(decrypted.as_u128(), original.as_u128());
     /// ```
     #[cfg(feature = "encryption")]
     pub fn decrypt_v1_to_v0(
         &self,
-        key: impl Into<encryption::EncryptionKey>,
+        key: &encryption::EncryptionKey,
     ) -> Result<Self, encryption::EncryptionError> {
-        let id = encryption::decrypt_id_v1_to_v0(self.id, &key.into())?;
+        let id = encryption::decrypt_id_v1_to_v0(self.id, key)?;
 
         Ok(Self {
             id_name: PhantomData,
@@ -965,6 +967,7 @@ impl<Name: TnidName> Tnid<Name> {
     ///
     /// ```rust
     /// use tnid::{Tnid, TnidName, NameStr};
+    /// use tnid::encryption::EncryptionKey;
     /// use tnid::filter::Blocklist;
     ///
     /// struct User;
@@ -972,18 +975,18 @@ impl<Name: TnidName> Tnid<Name> {
     ///     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
     /// }
     ///
-    /// let key = [1u8; 16];
+    /// let key = EncryptionKey::new([1u8; 16]);
     /// let blocklist = Blocklist::new(&["TACO", "FOO"]);
-    /// let v0 = Tnid::<User>::new_v0_filtered_for_encryption(key, &blocklist).unwrap();
+    /// let v0 = Tnid::<User>::new_v0_filtered_for_encryption(&key, &blocklist).unwrap();
     ///
     /// // Both V0 and encrypted V1 are clean
     /// assert!(!blocklist.contains_match(&v0.data_string()));
-    /// let v1 = v0.encrypt_v0_to_v1(key).unwrap();
+    /// let v1 = v0.encrypt_v0_to_v1(&key).unwrap();
     /// assert!(!blocklist.contains_match(&v1.data_string()));
     /// ```
     #[cfg(all(feature = "filter", feature = "encryption"))]
     pub fn new_v0_filtered_for_encryption(
-        key: impl Into<encryption::EncryptionKey> + Copy,
+        key: &encryption::EncryptionKey,
         blocklist: &filter::Blocklist,
     ) -> Result<Self, filter::FilterError> {
         // Start from max(current_time, last_safe_timestamp) to avoid re-discovering bad windows
@@ -1156,21 +1159,21 @@ mod tests {
     #[cfg(feature = "encryption")]
     #[test]
     fn encryption_bidirectional() {
-        let secret = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        let key = encryption::EncryptionKey::new([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
 
         // Use the featureless constructor so this test doesn't require `time`/`rand`.
         let original: Tnid<TestId> = Tnid::new_v0_with_parts(1_700_000_000_000, 42);
         assert_eq!(original.variant(), TnidVariant::V0);
 
         let encrypted = original
-            .encrypt_v0_to_v1(secret)
+            .encrypt_v0_to_v1(&key)
             .expect("encryption should succeed");
         assert_eq!(encrypted.variant(), TnidVariant::V1);
 
         dbg!(encrypted, original);
 
         let decrypted = encrypted
-            .decrypt_v1_to_v0(secret)
+            .decrypt_v1_to_v0(&key)
             .expect("decryption should succeed");
         assert_eq!(decrypted.variant(), TnidVariant::V0);
 
@@ -1328,18 +1331,18 @@ mod tests {
     #[cfg(all(feature = "filter", feature = "encryption"))]
     #[test]
     fn new_v0_filtered_for_encryption_produces_clean_ids() {
-        let key = [1u8; 16];
+        let key = encryption::EncryptionKey::new([1u8; 16]);
         let blocklist = filter::Blocklist::new(&["TACO", "FOO", "BAR"]);
 
         for _ in 0..50 {
-            let v0 = Tnid::<TestId>::new_v0_filtered_for_encryption(key, &blocklist).unwrap();
+            let v0 = Tnid::<TestId>::new_v0_filtered_for_encryption(&key, &blocklist).unwrap();
             let v0_data = v0.data_string();
             assert!(
                 !blocklist.contains_match(&v0_data),
                 "V0 should not contain blocklist words: {v0_data}"
             );
 
-            let v1 = v0.encrypt_v0_to_v1(key).unwrap();
+            let v1 = v0.encrypt_v0_to_v1(&key).unwrap();
             let v1_data = v1.data_string();
             assert!(
                 !blocklist.contains_match(&v1_data),

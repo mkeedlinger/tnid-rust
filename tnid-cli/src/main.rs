@@ -352,7 +352,7 @@ fn main() {
             match tnid.variant() {
                 TnidVariant::V0 => {
                     // Encrypt V0 to V1
-                    let encrypted = match tnid.encrypt_v0_to_v1(encryption_key) {
+                    let encrypted = match tnid.encrypt_v0_to_v1(&encryption_key) {
                         Ok(e) => e,
                         Err(e) => {
                             eprintln!("Error encrypting TNID: {}", e);
@@ -397,7 +397,7 @@ fn main() {
             match tnid.variant() {
                 TnidVariant::V1 => {
                     // Decrypt V1 to V0
-                    let decrypted = match tnid.decrypt_v1_to_v0(encryption_key) {
+                    let decrypted = match tnid.decrypt_v1_to_v0(&encryption_key) {
                         Ok(d) => d,
                         Err(e) => {
                             eprintln!("Error decrypting TNID: {}", e);

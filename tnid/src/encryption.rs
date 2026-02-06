@@ -35,24 +35,25 @@
 //!
 //! ```rust
 //! use tnid::{Tnid, TnidName, NameStr, TnidVariant};
+//! use tnid::encryption::EncryptionKey;
 //!
 //! struct User;
 //! impl TnidName for User {
 //!     const ID_NAME: NameStr<'static> = NameStr::new_const("user");
 //! }
 //!
-//! let secret = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+//! let key = EncryptionKey::new([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
 //!
 //! // Create a time-ordered V0 TNID
 //! let original = Tnid::<User>::new_v0();
 //! assert_eq!(original.variant(), TnidVariant::V0);
 //!
 //! // Encrypt to V1 before sending to client
-//! let encrypted = original.encrypt_v0_to_v1(secret).unwrap();
+//! let encrypted = original.encrypt_v0_to_v1(&key).unwrap();
 //! assert_eq!(encrypted.variant(), TnidVariant::V1);
 //!
 //! // Decrypt on the backend to recover the original
-//! let decrypted = encrypted.decrypt_v1_to_v0(secret).unwrap();
+//! let decrypted = encrypted.decrypt_v1_to_v0(&key).unwrap();
 //! assert_eq!(decrypted.as_u128(), original.as_u128());
 //! ```
 
@@ -60,6 +61,9 @@ use aes::Aes128;
 use fpe::ff1::{FlexibleNumeralString, FF1};
 
 use crate::{utils, TnidVariant};
+
+/// The radix used for FF1 encryption (hex digits, 0-15).
+const FF1_RADIX: u32 = 16;
 
 /// Error when creating an [`EncryptionKey`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -135,12 +139,6 @@ impl std::error::Error for EncryptionError {}
 
 /// A 128-bit (16 byte) encryption key for TNID encryption.
 ///
-/// This is a simple wrapper around `[u8; 16]` with helper methods for
-/// constructing keys from various formats.
-///
-/// The key is 128 bits to match the AES-128 cipher used in the FF1
-/// format-preserving encryption scheme.
-///
 /// # Example
 ///
 /// ```rust
@@ -156,13 +154,12 @@ impl std::error::Error for EncryptionError {}
 /// let bytes: &[u8] = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
 /// let key = EncryptionKey::from_slice(bytes).unwrap();
 /// ```
-#[derive(Clone, PartialEq, Eq)]
-pub struct EncryptionKey([u8; 16]);
+pub struct EncryptionKey(FF1<Aes128>);
 
 impl EncryptionKey {
     /// Creates a new encryption key from raw bytes.
     pub fn new(bytes: [u8; 16]) -> Self {
-        Self(bytes)
+        Self(FF1::<Aes128>::new(&bytes, FF1_RADIX).expect("radix 16 is always valid"))
     }
 
     /// Creates an encryption key from a 32-character hex string.
@@ -175,8 +172,6 @@ impl EncryptionKey {
     /// use tnid::encryption::EncryptionKey;
     ///
     /// let key = EncryptionKey::from_hex("0102030405060708090a0b0c0d0e0f10").unwrap();
-    /// assert_eq!(key.as_bytes()[0], 0x01);
-    /// assert_eq!(key.as_bytes()[15], 0x10);
     ///
     /// // Case insensitive
     /// let key = EncryptionKey::from_hex("0102030405060708090A0B0C0D0E0F10").unwrap();
@@ -216,7 +211,7 @@ impl EncryptionKey {
             *byte_slot = (high << 4) | low;
         }
 
-        Ok(Self(bytes))
+        Ok(Self::new(bytes))
     }
 
     /// Creates an encryption key from a byte slice.
@@ -238,19 +233,9 @@ impl EncryptionKey {
         let bytes: [u8; 16] = s
             .try_into()
             .map_err(|_| EncryptionKeyError::WrongByteLength(s.len()))?;
-        Ok(Self(bytes))
+        Ok(Self::new(bytes))
     }
 
-    /// Returns the key as a byte array reference.
-    pub fn as_bytes(&self) -> &[u8; 16] {
-        &self.0
-    }
-}
-
-impl From<[u8; 16]> for EncryptionKey {
-    fn from(bytes: [u8; 16]) -> Self {
-        Self::new(bytes)
-    }
 }
 
 /// Mask for the right-most Payload bits section (bits 0-51).
@@ -334,9 +319,9 @@ pub fn encrypt(id_secret_data: u128, key: &EncryptionKey) -> u128 {
 
     let hex_digits = u128_to_hex_digits(data);
     let numeral_string = FlexibleNumeralString::from(hex_digits);
-    let ff1 = FF1::<Aes128>::new(key.as_bytes(), 16).expect("16 is valid radix");
 
-    let encrypted = ff1
+    let encrypted = key
+        .0
         .encrypt(&[], &numeral_string)
         .expect("string is in required radix");
 
@@ -357,9 +342,9 @@ pub fn decrypt(id_secret_data: u128, key: &EncryptionKey) -> u128 {
 
     let hex_digits = u128_to_hex_digits(data);
     let numeral_string = FlexibleNumeralString::from(hex_digits);
-    let ff1 = FF1::<Aes128>::new(key.as_bytes(), 16).expect("16 is valid radix");
 
-    let decrypted = ff1
+    let decrypted = key
+        .0
         .decrypt(&[], &numeral_string)
         .expect("string is in required radix");
 
@@ -458,7 +443,7 @@ mod tests_release {
         })]
         #[test]
         fn decrypt_no_panic(id_secret_data: u128, secret: u128) {
-            let key: EncryptionKey = secret.to_le_bytes().into();
+            let key = EncryptionKey::new(secret.to_le_bytes());
             decrypt(id_secret_data, &key);
         }
     }
@@ -468,12 +453,14 @@ mod tests_release {
         samples.iter().filter(|x| (*x >> bit_pos) & 1 == 1).count()
     }
 
+    const TEST_KEY_BYTES: [u8; 16] = [
+        0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf,
+        0x4f, 0x3c,
+    ];
+
     /// Fixed test key for deterministic tests
     fn test_key() -> EncryptionKey {
-        EncryptionKey::new([
-            0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf,
-            0x4f, 0x3c,
-        ])
+        EncryptionKey::new(TEST_KEY_BYTES)
     }
 
     // ==================================================================================
@@ -776,7 +763,7 @@ mod tests_release {
     #[test]
     fn different_keys_produce_unrelated_outputs() {
         let key1 = test_key();
-        let mut key2_bytes = *key1.as_bytes();
+        let mut key2_bytes = TEST_KEY_BYTES;
         key2_bytes[0] ^= 1; // Flip one bit
         let key2 = EncryptionKey::new(key2_bytes);
 
