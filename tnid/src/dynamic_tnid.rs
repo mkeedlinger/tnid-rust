@@ -384,6 +384,26 @@ impl DynamicTnid {
         name_encoding::name_bits_to_hex(self.0)
     }
 
+    /// Returns just the data portion of the TNID string (17 characters).
+    ///
+    /// This is the encoded data after the dot in the full TNID string format.
+    /// Useful for inspecting or filtering the data portion independently.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tnid::{DynamicTnid, NameStr};
+    ///
+    /// let name = NameStr::new("user").unwrap();
+    /// let id = DynamicTnid::new_v0(name);
+    /// let data = id.data_string();
+    /// assert_eq!(data.len(), 17);
+    /// assert_eq!(id.to_tnid_string(), format!("{}.{}", id.name(), data));
+    /// ```
+    pub fn data_string(&self) -> String {
+        data_encoding::id_data_to_string(self.0)
+    }
+
     /// Returns the raw 128-bit UUIDv8-compatible representation of this TNID.
     ///
     /// This returns the complete bit representation including the name, UUID version/variant
